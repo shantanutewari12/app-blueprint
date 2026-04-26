@@ -1,6 +1,7 @@
 import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { Video, Mail, Loader2 } from "lucide-react";
+import { Mail, Loader2 } from "lucide-react";
+import logo from "@/assets/linka-logo.png";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
