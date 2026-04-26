@@ -79,9 +79,7 @@ function LoginPage() {
     <div className="grid min-h-screen bg-hero lg:grid-cols-2">
       <div className="relative hidden flex-col justify-between overflow-hidden bg-call-bg p-10 text-white lg:flex">
         <Link to="/" className="flex items-center gap-2">
-          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-primary">
-            <Video className="h-5 w-5" />
-          </div>
+          <img src={logo} alt="Linka" width={36} height={36} className="h-9 w-9" />
           <span className="text-lg font-semibold">Linka</span>
         </Link>
         <div className="relative z-10">
@@ -100,9 +98,7 @@ function LoginPage() {
       <div className="flex items-center justify-center p-6 sm:p-10">
         <div className="w-full max-w-md">
           <Link to="/" className="mb-8 inline-flex items-center gap-2 lg:hidden">
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-primary text-primary-foreground">
-              <Video className="h-5 w-5" />
-            </div>
+            <img src={logo} alt="Linka" width={36} height={36} className="h-9 w-9" />
             <span className="text-lg font-semibold">Linka</span>
           </Link>
 
