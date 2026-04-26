@@ -76,14 +76,14 @@ function RoomPage() {
         .eq("room_code", roomCode)
         .maybeSingle();
 
-      // If room doesn't exist and user is signed in, create it (so links shared work)
-      if (!data && !error && user) {
+      // If room doesn't exist, auto-create so any shared link works (guest or signed-in)
+      if (!data && !error) {
         const { data: created, error: insErr } = await supabase
           .from("meetings")
           .insert({
             room_code: roomCode,
             title: "Instant meeting",
-            host_id: user.id,
+            host_id: user?.id ?? null,
           })
           .select("id, room_code, title, host_id, password, ended_at")
           .single();

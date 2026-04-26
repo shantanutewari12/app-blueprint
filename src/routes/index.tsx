@@ -26,18 +26,13 @@ function Landing() {
   const [creating, setCreating] = useState(false);
 
   const handleCreateInstant = async () => {
-    if (!user) {
-      toast.info("Sign in to create a meeting");
-      navigate({ to: "/login" });
-      return;
-    }
     setCreating(true);
     try {
       const roomCode = generateRoomCode();
       const { error } = await supabase.from("meetings").insert({
         room_code: roomCode,
         title: "Instant meeting",
-        host_id: user.id,
+        host_id: user?.id ?? null,
       });
       if (error) throw error;
       navigate({ to: "/room/$code", params: { code: roomCode } });
