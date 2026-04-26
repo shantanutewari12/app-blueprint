@@ -13,6 +13,7 @@ import { Route as ScheduleRouteImport } from './routes/schedule'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as DashboardRouteImport } from './routes/dashboard'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as RoomCodeRouteImport } from './routes/room.$code'
 
 const ScheduleRoute = ScheduleRouteImport.update({
   id: '/schedule',
@@ -34,18 +35,25 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const RoomCodeRoute = RoomCodeRouteImport.update({
+  id: '/room/$code',
+  path: '/room/$code',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/dashboard': typeof DashboardRoute
   '/login': typeof LoginRoute
   '/schedule': typeof ScheduleRoute
+  '/room/$code': typeof RoomCodeRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/dashboard': typeof DashboardRoute
   '/login': typeof LoginRoute
   '/schedule': typeof ScheduleRoute
+  '/room/$code': typeof RoomCodeRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -53,13 +61,14 @@ export interface FileRoutesById {
   '/dashboard': typeof DashboardRoute
   '/login': typeof LoginRoute
   '/schedule': typeof ScheduleRoute
+  '/room/$code': typeof RoomCodeRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/dashboard' | '/login' | '/schedule'
+  fullPaths: '/' | '/dashboard' | '/login' | '/schedule' | '/room/$code'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/dashboard' | '/login' | '/schedule'
-  id: '__root__' | '/' | '/dashboard' | '/login' | '/schedule'
+  to: '/' | '/dashboard' | '/login' | '/schedule' | '/room/$code'
+  id: '__root__' | '/' | '/dashboard' | '/login' | '/schedule' | '/room/$code'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -67,6 +76,7 @@ export interface RootRouteChildren {
   DashboardRoute: typeof DashboardRoute
   LoginRoute: typeof LoginRoute
   ScheduleRoute: typeof ScheduleRoute
+  RoomCodeRoute: typeof RoomCodeRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -99,6 +109,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/room/$code': {
+      id: '/room/$code'
+      path: '/room/$code'
+      fullPath: '/room/$code'
+      preLoaderRoute: typeof RoomCodeRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -107,7 +124,17 @@ const rootRouteChildren: RootRouteChildren = {
   DashboardRoute: DashboardRoute,
   LoginRoute: LoginRoute,
   ScheduleRoute: ScheduleRoute,
+  RoomCodeRoute: RoomCodeRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
+
+import type { getRouter } from './router.tsx'
+import type { createStart } from '@tanstack/react-start'
+declare module '@tanstack/react-start' {
+  interface Register {
+    ssr: true
+    router: Awaited<ReturnType<typeof getRouter>>
+  }
+}
