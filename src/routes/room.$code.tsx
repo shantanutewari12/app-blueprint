@@ -1,16 +1,21 @@
 import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Mic, MicOff, Video as VideoIcon, VideoOff, MonitorUp, MessageSquare,
-  Users, Hand, Smile, PhoneOff, Copy, Send, X, MoreVertical,
+  Users, Hand, Smile, PhoneOff, Copy, Send, X, Share2, Mail, Check,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
+} from "@/components/ui/dialog";
 import { useAuth } from "@/hooks/use-auth";
 import { supabase } from "@/integrations/supabase/client";
 import { normalizeRoomCode } from "@/lib/room";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import logo from "@/assets/linka-logo.png";
+import type { RealtimeChannel } from "@supabase/supabase-js";
 
 interface ChatMessage {
   id: string;
@@ -29,17 +34,38 @@ interface MeetingRow {
   ended_at: string | null;
 }
 
+interface PresenceState {
+  peerId: string;
+  name: string;
+  micOn: boolean;
+  camOn: boolean;
+  handRaised: boolean;
+}
+
+interface RemotePeer {
+  peerId: string;
+  name: string;
+  stream?: MediaStream;
+  micOn: boolean;
+  camOn: boolean;
+  handRaised: boolean;
+}
+
 export const Route = createFileRoute("/room/$code")({
   component: RoomPage,
 });
 
 const REACTIONS = ["👍", "❤️", "😂", "🎉", "👏", "🙌"];
+const ICE_SERVERS: RTCConfiguration = {
+  iceServers: [
+    { urls: "stun:stun.l.google.com:19302" },
+    { urls: "stun:stun1.l.google.com:19302" },
+  ],
+};
 
-const DEMO_PEERS = [
-  { id: "p1", name: "Aanya", color: "from-pink-400 to-rose-500" },
-  { id: "p2", name: "Rohan", color: "from-blue-400 to-indigo-500" },
-  { id: "p3", name: "Mira", color: "from-emerald-400 to-teal-500" },
-];
+function makePeerId() {
+  return Math.random().toString(36).slice(2) + Date.now().toString(36);
+}
 
 function RoomPage() {
   const { code } = Route.useParams();
@@ -52,22 +78,38 @@ function RoomPage() {
   const [joined, setJoined] = useState(false);
   const [guestName, setGuestName] = useState("");
 
-  // call state
   const [micOn, setMicOn] = useState(true);
   const [camOn, setCamOn] = useState(true);
   const [handRaised, setHandRaised] = useState(false);
   const [screenSharing, setScreenSharing] = useState(false);
   const [showChat, setShowChat] = useState(false);
   const [showPeople, setShowPeople] = useState(false);
+  const [showShare, setShowShare] = useState(false);
+  const [linkCopied, setLinkCopied] = useState(false);
   const [reactions, setReactions] = useState<{ id: number; emoji: string }[]>([]);
 
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [draft, setDraft] = useState("");
+  const [peers, setPeers] = useState<Record<string, RemotePeer>>({});
 
+  const peerIdRef = useRef<string>(makePeerId());
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  const channelRef = useRef<RealtimeChannel | null>(null);
+  const pcsRef = useRef<Record<string, RTCPeerConnection>>({});
 
-  // Load meeting
+  const senderName = useMemo(
+    () =>
+      user?.user_metadata?.full_name ||
+      user?.email?.split("@")[0] ||
+      guestName ||
+      "Guest",
+    [user, guestName],
+  );
+
+  const shareUrl = typeof window !== "undefined" ? window.location.href : "";
+
+  // Load / auto-create meeting
   useEffect(() => {
     (async () => {
       let { data, error } = await supabase
@@ -76,7 +118,6 @@ function RoomPage() {
         .eq("room_code", roomCode)
         .maybeSingle();
 
-      // If room doesn't exist, auto-create so any shared link works (guest or signed-in)
       if (!data && !error) {
         const { data: created, error: insErr } = await supabase
           .from("meetings")
@@ -100,7 +141,7 @@ function RoomPage() {
     })();
   }, [roomCode, user, navigate]);
 
-  // Fetch chat history + realtime
+  // Chat history + realtime messages
   useEffect(() => {
     if (!meeting) return;
     (async () => {
@@ -113,8 +154,8 @@ function RoomPage() {
       if (data) setMessages(data);
     })();
 
-    const channel = supabase
-      .channel(`meeting:${meeting.id}`)
+    const ch = supabase
+      .channel(`chat:${meeting.id}`)
       .on(
         "postgres_changes",
         {
@@ -123,29 +164,23 @@ function RoomPage() {
           table: "meeting_messages",
           filter: `meeting_id=eq.${meeting.id}`,
         },
-        (payload) => {
-          setMessages((m) => [...m, payload.new as ChatMessage]);
-        },
+        (payload) => setMessages((m) => [...m, payload.new as ChatMessage]),
       )
       .subscribe();
 
     return () => {
-      supabase.removeChannel(channel);
+      supabase.removeChannel(ch);
     };
   }, [meeting]);
 
-  const senderName =
-    user?.user_metadata?.full_name || user?.email?.split("@")[0] || guestName || "Guest";
-
-  // Camera/mic
+  // Acquire camera/mic when joined
   useEffect(() => {
     if (!joined) return;
     let cancelled = false;
-
     (async () => {
       try {
         const stream = await navigator.mediaDevices.getUserMedia({
-          video: camOn,
+          video: true,
           audio: true,
         });
         if (cancelled) {
@@ -153,18 +188,15 @@ function RoomPage() {
           return;
         }
         streamRef.current = stream;
-        if (videoRef.current) {
-          videoRef.current.srcObject = stream;
-        }
-        // sync mic state
+        if (videoRef.current) videoRef.current.srcObject = stream;
         stream.getAudioTracks().forEach((t) => (t.enabled = micOn));
-      } catch (e) {
+        stream.getVideoTracks().forEach((t) => (t.enabled = camOn));
+      } catch {
         toast.error("Camera/mic blocked", {
-          description: "We'll continue without it. Check browser permissions.",
+          description: "Check browser permissions to share video & audio.",
         });
       }
     })();
-
     return () => {
       cancelled = true;
       streamRef.current?.getTracks().forEach((t) => t.stop());
@@ -173,14 +205,187 @@ function RoomPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [joined]);
 
-  // toggle tracks live
   useEffect(() => {
     streamRef.current?.getAudioTracks().forEach((t) => (t.enabled = micOn));
   }, [micOn]);
-
   useEffect(() => {
     streamRef.current?.getVideoTracks().forEach((t) => (t.enabled = camOn));
   }, [camOn]);
+
+  // WebRTC + Supabase Realtime presence/signaling
+  useEffect(() => {
+    if (!joined || !meeting) return;
+    const myId = peerIdRef.current;
+
+    const createPeer = async (remoteId: string, initiator: boolean) => {
+      if (pcsRef.current[remoteId]) return pcsRef.current[remoteId];
+      const pc = new RTCPeerConnection(ICE_SERVERS);
+      pcsRef.current[remoteId] = pc;
+
+      streamRef.current?.getTracks().forEach((track) => {
+        if (streamRef.current) pc.addTrack(track, streamRef.current);
+      });
+
+      pc.ontrack = (e) => {
+        const [remoteStream] = e.streams;
+        setPeers((p) => ({
+          ...p,
+          [remoteId]: { ...(p[remoteId] ?? { peerId: remoteId, name: "Guest", micOn: true, camOn: true, handRaised: false }), stream: remoteStream },
+        }));
+      };
+
+      pc.onicecandidate = (e) => {
+        if (e.candidate && channelRef.current) {
+          channelRef.current.send({
+            type: "broadcast",
+            event: "ice",
+            payload: { from: myId, to: remoteId, candidate: e.candidate.toJSON() },
+          });
+        }
+      };
+
+      pc.onconnectionstatechange = () => {
+        if (["failed", "disconnected", "closed"].includes(pc.connectionState)) {
+          delete pcsRef.current[remoteId];
+        }
+      };
+
+      if (initiator) {
+        const offer = await pc.createOffer();
+        await pc.setLocalDescription(offer);
+        channelRef.current?.send({
+          type: "broadcast",
+          event: "offer",
+          payload: { from: myId, to: remoteId, sdp: offer },
+        });
+      }
+      return pc;
+    };
+
+    const ch = supabase.channel(`room:${meeting.id}`, {
+      config: { presence: { key: myId } },
+    });
+    channelRef.current = ch;
+
+    ch.on("presence", { event: "sync" }, () => {
+      const state = ch.presenceState() as Record<string, PresenceState[]>;
+      const next: Record<string, RemotePeer> = {};
+      Object.entries(state).forEach(([key, metas]) => {
+        if (key === myId) return;
+        const meta = metas[0];
+        next[key] = {
+          peerId: key,
+          name: meta?.name ?? "Guest",
+          micOn: meta?.micOn ?? true,
+          camOn: meta?.camOn ?? true,
+          handRaised: meta?.handRaised ?? false,
+          stream: peers[key]?.stream,
+        };
+      });
+      setPeers((prev) => {
+        const merged: Record<string, RemotePeer> = {};
+        Object.keys(next).forEach((k) => {
+          merged[k] = { ...next[k], stream: prev[k]?.stream };
+        });
+        // drop peers no longer present
+        Object.keys(prev).forEach((k) => {
+          if (!next[k] && pcsRef.current[k]) {
+            pcsRef.current[k].close();
+            delete pcsRef.current[k];
+          }
+        });
+        return merged;
+      });
+    });
+
+    ch.on("presence", { event: "join" }, ({ key }) => {
+      if (key === myId) return;
+      // tie-break: lower id initiates the call to avoid double offers
+      if (myId < key) void createPeer(key, true);
+    });
+
+    ch.on("presence", { event: "leave" }, ({ key }) => {
+      const pc = pcsRef.current[key];
+      if (pc) {
+        pc.close();
+        delete pcsRef.current[key];
+      }
+      setPeers((p) => {
+        const n = { ...p };
+        delete n[key];
+        return n;
+      });
+    });
+
+    ch.on("broadcast", { event: "offer" }, async ({ payload }) => {
+      if (payload.to !== myId) return;
+      const pc = await createPeer(payload.from, false);
+      await pc.setRemoteDescription(new RTCSessionDescription(payload.sdp));
+      const answer = await pc.createAnswer();
+      await pc.setLocalDescription(answer);
+      ch.send({
+        type: "broadcast",
+        event: "answer",
+        payload: { from: myId, to: payload.from, sdp: answer },
+      });
+    });
+
+    ch.on("broadcast", { event: "answer" }, async ({ payload }) => {
+      if (payload.to !== myId) return;
+      const pc = pcsRef.current[payload.from];
+      if (pc) await pc.setRemoteDescription(new RTCSessionDescription(payload.sdp));
+    });
+
+    ch.on("broadcast", { event: "ice" }, async ({ payload }) => {
+      if (payload.to !== myId) return;
+      const pc = pcsRef.current[payload.from];
+      if (pc) {
+        try {
+          await pc.addIceCandidate(new RTCIceCandidate(payload.candidate));
+        } catch {
+          /* ignore */
+        }
+      }
+    });
+
+    ch.on("broadcast", { event: "reaction" }, ({ payload }) => {
+      const id = Date.now() + Math.random();
+      setReactions((r) => [...r, { id, emoji: payload.emoji as string }]);
+      setTimeout(() => setReactions((r) => r.filter((x) => x.id !== id)), 2400);
+    });
+
+    ch.subscribe(async (status) => {
+      if (status === "SUBSCRIBED") {
+        await ch.track({
+          peerId: myId,
+          name: senderName,
+          micOn,
+          camOn,
+          handRaised,
+        } satisfies PresenceState);
+      }
+    });
+
+    return () => {
+      Object.values(pcsRef.current).forEach((pc) => pc.close());
+      pcsRef.current = {};
+      supabase.removeChannel(ch);
+      channelRef.current = null;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [joined, meeting]);
+
+  // Update presence metadata when toggling state
+  useEffect(() => {
+    if (!channelRef.current) return;
+    void channelRef.current.track({
+      peerId: peerIdRef.current,
+      name: senderName,
+      micOn,
+      camOn,
+      handRaised,
+    } satisfies PresenceState);
+  }, [micOn, camOn, handRaised, senderName]);
 
   const sendMessage = async () => {
     if (!draft.trim() || !meeting) return;
@@ -199,42 +404,71 @@ function RoomPage() {
     const id = Date.now() + Math.random();
     setReactions((r) => [...r, { id, emoji }]);
     setTimeout(() => setReactions((r) => r.filter((x) => x.id !== id)), 2400);
+    channelRef.current?.send({ type: "broadcast", event: "reaction", payload: { emoji } });
   };
 
-  const copyLink = () => {
-    navigator.clipboard.writeText(window.location.href);
-    toast.success("Link copied");
+  const copyLink = async () => {
+    await navigator.clipboard.writeText(shareUrl);
+    setLinkCopied(true);
+    setTimeout(() => setLinkCopied(false), 1800);
+    toast.success("Link copied — share it on any device");
+  };
+
+  const nativeShare = async () => {
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: "Join my Linka meeting",
+          text: `Join my meeting on Linka: ${roomCode}`,
+          url: shareUrl,
+        });
+      } catch {
+        /* user cancelled */
+      }
+    } else {
+      setShowShare(true);
+    }
   };
 
   const leave = () => {
     streamRef.current?.getTracks().forEach((t) => t.stop());
+    Object.values(pcsRef.current).forEach((pc) => pc.close());
     navigate({ to: "/" });
   };
 
   const toggleScreenShare = async () => {
     if (screenSharing) {
       setScreenSharing(false);
-      // restore camera
       try {
-        const stream = await navigator.mediaDevices.getUserMedia({ video: camOn, audio: true });
-        streamRef.current?.getTracks().forEach((t) => t.stop());
-        streamRef.current = stream;
-        if (videoRef.current) videoRef.current.srcObject = stream;
-      } catch {}
+        const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+        replaceLocalStream(stream);
+      } catch { /* ignore */ }
       return;
     }
     try {
       const screen = await (navigator.mediaDevices as MediaDevices & {
         getDisplayMedia: (c: MediaStreamConstraints) => Promise<MediaStream>;
       }).getDisplayMedia({ video: true });
-      streamRef.current?.getTracks().forEach((t) => t.stop());
-      streamRef.current = screen;
-      if (videoRef.current) videoRef.current.srcObject = screen;
+      // Keep mic from current stream
+      const audio = streamRef.current?.getAudioTracks()[0];
+      if (audio) screen.addTrack(audio);
+      replaceLocalStream(screen);
       screen.getVideoTracks()[0].onended = () => setScreenSharing(false);
       setScreenSharing(true);
     } catch {
       toast.error("Screen share cancelled");
     }
+  };
+
+  const replaceLocalStream = (stream: MediaStream) => {
+    streamRef.current?.getVideoTracks().forEach((t) => t.stop());
+    streamRef.current = stream;
+    if (videoRef.current) videoRef.current.srcObject = stream;
+    const newVideoTrack = stream.getVideoTracks()[0];
+    Object.values(pcsRef.current).forEach((pc) => {
+      const sender = pc.getSenders().find((s) => s.track?.kind === "video");
+      if (sender && newVideoTrack) void sender.replaceTrack(newVideoTrack);
+    });
   };
 
   if (loading) {
@@ -250,11 +484,15 @@ function RoomPage() {
     return (
       <div className="flex min-h-screen flex-col bg-call-bg text-white">
         <header className="flex items-center justify-between p-4">
-          <Link to="/" className="text-sm text-white/70 hover:text-white">
-            ← Linka
+          <Link to="/" className="flex items-center gap-2 text-sm text-white/70 hover:text-white">
+            <img src={logo} alt="Linka" width={28} height={28} className="h-7 w-7" />
+            Linka
           </Link>
-          <button onClick={copyLink} className="flex items-center gap-2 rounded-lg bg-white/10 px-3 py-1.5 text-xs hover:bg-white/15">
-            <Copy className="h-3.5 w-3.5" />
+          <button
+            onClick={copyLink}
+            className="flex items-center gap-2 rounded-lg bg-white/10 px-3 py-1.5 text-xs hover:bg-white/15"
+          >
+            {linkCopied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
             <span className="font-mono">{roomCode}</span>
           </button>
         </header>
@@ -268,10 +506,37 @@ function RoomPage() {
 
           <div className="mx-auto w-full max-w-md">
             <h1 className="text-3xl font-semibold tracking-tight">{meeting?.title}</h1>
-            <p className="mt-2 text-white/60">Ready to join? Check your name and hit join.</p>
+            <p className="mt-2 text-white/60">
+              Share this link to invite anyone — they don't need an account.
+            </p>
+
+            <div className="mt-5 flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 p-2">
+              <Input
+                readOnly
+                value={shareUrl}
+                className="border-0 bg-transparent text-sm text-white/80 focus-visible:ring-0"
+              />
+              <Button
+                onClick={copyLink}
+                size="sm"
+                variant="secondary"
+                className="shrink-0 bg-white/10 text-white hover:bg-white/20"
+              >
+                {linkCopied ? <Check className="mr-1 h-4 w-4" /> : <Copy className="mr-1 h-4 w-4" />}
+                {linkCopied ? "Copied" : "Copy"}
+              </Button>
+              <Button
+                onClick={nativeShare}
+                size="sm"
+                className="shrink-0 bg-gradient-primary text-primary-foreground"
+              >
+                <Share2 className="mr-1 h-4 w-4" />
+                Share
+              </Button>
+            </div>
 
             {!user && (
-              <div className="mt-6">
+              <div className="mt-5">
                 <label className="text-sm text-white/70">Your name</label>
                 <Input
                   value={guestName}
@@ -282,7 +547,7 @@ function RoomPage() {
               </div>
             )}
 
-            <div className="mt-6 flex flex-col gap-3 sm:flex-row">
+            <div className="mt-5 flex flex-col gap-3 sm:flex-row">
               <Button
                 disabled={!user && !guestName.trim()}
                 onClick={() => setJoined(true)}
@@ -291,42 +556,67 @@ function RoomPage() {
                 Join now
               </Button>
               {!user && (
-                <Button asChild variant="outline" className="h-12 border-white/20 bg-transparent text-white hover:bg-white/10">
+                <Button
+                  asChild
+                  variant="outline"
+                  className="h-12 border-white/20 bg-transparent text-white hover:bg-white/10"
+                >
                   <Link to="/login">Sign in</Link>
                 </Button>
               )}
             </div>
-
-            <p className="mt-4 text-xs text-white/40">
-              Tip: For real audio/video between participants, connect Daily.co in settings.
-            </p>
           </div>
         </div>
+
+        <ShareDialog open={showShare} onOpenChange={setShowShare} url={shareUrl} code={roomCode} />
       </div>
     );
   }
 
-  // In-call
+  const peerList = Object.values(peers);
+  const totalTiles = peerList.length + 1;
+  const gridCols =
+    totalTiles <= 1 ? "grid-cols-1"
+    : totalTiles <= 4 ? "sm:grid-cols-2"
+    : totalTiles <= 9 ? "sm:grid-cols-2 md:grid-cols-3"
+    : "sm:grid-cols-3 md:grid-cols-4";
+
   return (
     <div className="flex h-screen flex-col bg-call-bg text-white">
-      {/* Top bar */}
       <header className="flex items-center justify-between border-b border-white/5 px-4 py-3">
         <div className="flex items-center gap-3">
-          <Link to="/" className="text-sm text-white/70 hover:text-white">Linka</Link>
+          <Link to="/" className="flex items-center gap-2 text-sm text-white/70 hover:text-white">
+            <img src={logo} alt="Linka" width={24} height={24} className="h-6 w-6" />
+            Linka
+          </Link>
           <span className="hidden text-white/40 sm:inline">·</span>
           <span className="hidden truncate text-sm font-medium sm:inline">{meeting?.title}</span>
+          <span className="ml-2 rounded-full bg-white/10 px-2 py-0.5 text-xs">
+            {totalTiles} {totalTiles === 1 ? "person" : "people"}
+          </span>
         </div>
-        <button onClick={copyLink} className="flex items-center gap-2 rounded-lg bg-white/10 px-3 py-1.5 text-xs hover:bg-white/15">
-          <Copy className="h-3.5 w-3.5" />
-          <span className="font-mono">{roomCode}</span>
-        </button>
+        <div className="flex items-center gap-2">
+          <Button
+            onClick={() => setShowShare(true)}
+            size="sm"
+            className="gap-2 bg-gradient-primary text-primary-foreground hover:opacity-95"
+          >
+            <Share2 className="h-3.5 w-3.5" />
+            <span className="hidden sm:inline">Share invite</span>
+          </Button>
+          <button
+            onClick={copyLink}
+            className="flex items-center gap-2 rounded-lg bg-white/10 px-3 py-1.5 text-xs hover:bg-white/15"
+          >
+            {linkCopied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+            <span className="font-mono">{roomCode}</span>
+          </button>
+        </div>
       </header>
 
-      {/* Main */}
       <div className="flex flex-1 overflow-hidden">
         <div className="relative flex-1 p-3">
-          <div className="grid h-full gap-2.5 sm:grid-cols-2">
-            {/* Local */}
+          <div className={cn("grid h-full gap-2.5 grid-cols-1", gridCols)}>
             <Tile name={`${senderName} (You)`} accent="bg-primary">
               <video
                 ref={videoRef}
@@ -335,13 +625,7 @@ function RoomPage() {
                 muted
                 className={cn("h-full w-full object-cover", !camOn && "hidden")}
               />
-              {!camOn && (
-                <div className="flex h-full w-full items-center justify-center">
-                  <div className="flex h-20 w-20 items-center justify-center rounded-full bg-gradient-primary text-2xl font-semibold">
-                    {senderName.charAt(0).toUpperCase()}
-                  </div>
-                </div>
-              )}
+              {!camOn && <Avatar name={senderName} />}
               {!micOn && (
                 <div className="absolute right-2 top-2 rounded-full bg-destructive p-1.5">
                   <MicOff className="h-3 w-3" />
@@ -354,14 +638,42 @@ function RoomPage() {
               )}
             </Tile>
 
-            {DEMO_PEERS.map((p) => (
-              <Tile key={p.id} name={p.name}>
-                <div className={`h-full w-full bg-gradient-to-br ${p.color}`} />
+            {peerList.length === 0 && (
+              <Tile name="Waiting for others">
+                <div className="flex h-full flex-col items-center justify-center gap-3 text-center text-white/60">
+                  <Users className="h-10 w-10 opacity-40" />
+                  <p className="px-4 text-sm">
+                    You're the only one here. Share the invite link to let others join.
+                  </p>
+                  <Button
+                    size="sm"
+                    onClick={() => setShowShare(true)}
+                    className="bg-gradient-primary text-primary-foreground"
+                  >
+                    <Share2 className="mr-1.5 h-3.5 w-3.5" />
+                    Share invite
+                  </Button>
+                </div>
+              </Tile>
+            )}
+
+            {peerList.map((p) => (
+              <Tile key={p.peerId} name={p.name}>
+                <PeerVideo peer={p} />
+                {!p.micOn && (
+                  <div className="absolute right-2 top-2 rounded-full bg-destructive p-1.5">
+                    <MicOff className="h-3 w-3" />
+                  </div>
+                )}
+                {p.handRaised && (
+                  <div className="absolute left-2 top-2 rounded-full bg-warning p-1.5 text-warning-foreground">
+                    <Hand className="h-3 w-3" />
+                  </div>
+                )}
               </Tile>
             ))}
           </div>
 
-          {/* Floating reactions */}
           <div className="pointer-events-none absolute inset-0 overflow-hidden">
             {reactions.map((r) => (
               <div
@@ -375,12 +687,14 @@ function RoomPage() {
           </div>
         </div>
 
-        {/* Right panels */}
         {(showChat || showPeople) && (
           <aside className="hidden w-80 shrink-0 flex-col border-l border-white/5 bg-call-tile/40 md:flex">
             <div className="flex items-center justify-between border-b border-white/5 px-4 py-3">
               <span className="font-medium">{showChat ? "Chat" : "People"}</span>
-              <button onClick={() => { setShowChat(false); setShowPeople(false); }} className="text-white/60 hover:text-white">
+              <button
+                onClick={() => { setShowChat(false); setShowPeople(false); }}
+                className="text-white/60 hover:text-white"
+              >
                 <X className="h-4 w-4" />
               </button>
             </div>
@@ -412,7 +726,11 @@ function RoomPage() {
                       placeholder="Send a message"
                       className="border-white/10 bg-white/5 text-white placeholder:text-white/30"
                     />
-                    <Button onClick={sendMessage} size="icon" className="bg-gradient-primary text-primary-foreground hover:opacity-95">
+                    <Button
+                      onClick={sendMessage}
+                      size="icon"
+                      className="bg-gradient-primary text-primary-foreground hover:opacity-95"
+                    >
                       <Send className="h-4 w-4" />
                     </Button>
                   </div>
@@ -423,21 +741,22 @@ function RoomPage() {
             {showPeople && (
               <div className="flex-1 space-y-1 overflow-y-auto p-2">
                 <PersonRow name={`${senderName} (You)`} host={user?.id === meeting?.host_id} micOn={micOn} />
-                {DEMO_PEERS.map((p) => (
-                  <PersonRow key={p.id} name={p.name} micOn />
+                {peerList.map((p) => (
+                  <PersonRow key={p.peerId} name={p.name} micOn={p.micOn} />
                 ))}
+                {peerList.length === 0 && (
+                  <p className="px-3 py-2 text-xs text-white/40">Just you so far.</p>
+                )}
               </div>
             )}
           </aside>
         )}
       </div>
 
-      {/* Controls */}
       <footer className="flex items-center justify-between border-t border-white/5 bg-call-bg/95 px-4 py-3 backdrop-blur">
         <div className="hidden text-xs text-white/40 sm:block">
           {new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
         </div>
-
         <div className="mx-auto flex items-center gap-2">
           <ControlBtn active={micOn} onClick={() => setMicOn((v) => !v)} label={micOn ? "Mute" : "Unmute"}>
             {micOn ? <Mic className="h-5 w-5" /> : <MicOff className="h-5 w-5" />}
@@ -452,13 +771,17 @@ function RoomPage() {
             <Hand className="h-5 w-5" />
           </ControlBtn>
 
-          <div className="relative">
-            <ControlBtn active onClick={() => {}} label="React" group>
+          <div className="group relative">
+            <ControlBtn active onClick={() => {}} label="React">
               <Smile className="h-5 w-5" />
             </ControlBtn>
             <div className="absolute bottom-full left-1/2 mb-2 hidden -translate-x-1/2 items-center gap-1 rounded-2xl bg-call-control p-2 shadow-elevated group-hover:flex">
               {REACTIONS.map((r) => (
-                <button key={r} onClick={() => sendReaction(r)} className="rounded-lg p-1 text-xl transition hover:scale-125">
+                <button
+                  key={r}
+                  onClick={() => sendReaction(r)}
+                  className="rounded-lg p-1 text-xl transition hover:scale-125"
+                >
                   {r}
                 </button>
               ))}
@@ -480,11 +803,10 @@ function RoomPage() {
             <span className="hidden sm:inline">Leave</span>
           </button>
         </div>
-
-        <button className="hidden h-10 w-10 items-center justify-center rounded-xl text-white/60 hover:bg-white/5 hover:text-white sm:flex">
-          <MoreVertical className="h-5 w-5" />
-        </button>
+        <div className="hidden w-10 sm:block" />
       </footer>
+
+      <ShareDialog open={showShare} onOpenChange={setShowShare} url={shareUrl} code={roomCode} />
 
       <style>{`
         @keyframes float {
@@ -509,10 +831,29 @@ function Tile({ name, children, accent }: { name: string; children: React.ReactN
   );
 }
 
+function Avatar({ name }: { name: string }) {
+  return (
+    <div className="flex h-full w-full items-center justify-center">
+      <div className="flex h-20 w-20 items-center justify-center rounded-full bg-gradient-primary text-2xl font-semibold text-primary-foreground">
+        {name.charAt(0).toUpperCase()}
+      </div>
+    </div>
+  );
+}
+
+function PeerVideo({ peer }: { peer: RemotePeer }) {
+  const ref = useRef<HTMLVideoElement>(null);
+  useEffect(() => {
+    if (ref.current && peer.stream) ref.current.srcObject = peer.stream;
+  }, [peer.stream]);
+  if (!peer.stream || !peer.camOn) return <Avatar name={peer.name} />;
+  return <video ref={ref} autoPlay playsInline className="h-full w-full object-cover" />;
+}
+
 function ControlBtn({
-  children, active, onClick, label, group,
+  children, active, onClick, label,
 }: {
-  children: React.ReactNode; active: boolean; onClick: () => void; label: string; group?: boolean;
+  children: React.ReactNode; active: boolean; onClick: () => void; label: string;
 }) {
   return (
     <button
@@ -522,7 +863,6 @@ function ControlBtn({
       className={cn(
         "flex h-11 w-11 items-center justify-center rounded-2xl transition",
         active ? "bg-white/10 text-white hover:bg-white/15" : "bg-destructive/90 text-destructive-foreground hover:bg-destructive",
-        group && "group",
       )}
     >
       {children}
@@ -536,9 +876,75 @@ function PersonRow({ name, host, micOn = true }: { name: string; host?: boolean;
       <div className="flex h-8 w-8 items-center justify-center rounded-full bg-gradient-primary text-xs font-semibold text-primary-foreground">
         {name.charAt(0).toUpperCase()}
       </div>
-      <div className="flex-1 truncate text-sm">{name}{host && <span className="ml-2 text-xs text-white/40">Host</span>}</div>
+      <div className="flex-1 truncate text-sm">
+        {name}{host && <span className="ml-2 text-xs text-white/40">Host</span>}
+      </div>
       {micOn ? <Mic className="h-3.5 w-3.5 text-white/50" /> : <MicOff className="h-3.5 w-3.5 text-destructive" />}
     </div>
+  );
+}
+
+function ShareDialog({
+  open, onOpenChange, url, code,
+}: {
+  open: boolean; onOpenChange: (v: boolean) => void; url: string; code: string;
+}) {
+  const [copied, setCopied] = useState(false);
+  const message = `Join my Linka meeting (${code}): ${url}`;
+  const copy = async () => {
+    await navigator.clipboard.writeText(url);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1800);
+  };
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Invite to your meeting</DialogTitle>
+          <DialogDescription>
+            Anyone with this link can join — no signup needed.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="mt-2 space-y-3">
+          <div className="flex items-center gap-2 rounded-xl border bg-muted/40 p-2">
+            <Input readOnly value={url} className="border-0 bg-transparent focus-visible:ring-0" />
+            <Button onClick={copy} size="sm" className="shrink-0 bg-gradient-primary text-primary-foreground">
+              {copied ? <Check className="mr-1 h-4 w-4" /> : <Copy className="mr-1 h-4 w-4" />}
+              {copied ? "Copied" : "Copy"}
+            </Button>
+          </div>
+          <div className="grid grid-cols-3 gap-2">
+            <a
+              href={`https://wa.me/?text=${encodeURIComponent(message)}`}
+              target="_blank"
+              rel="noreferrer"
+              className="flex flex-col items-center gap-1 rounded-xl border p-3 text-xs hover:bg-accent"
+            >
+              <span className="text-lg">💬</span>
+              WhatsApp
+            </a>
+            <a
+              href={`mailto:?subject=${encodeURIComponent("Join my Linka meeting")}&body=${encodeURIComponent(message)}`}
+              className="flex flex-col items-center gap-1 rounded-xl border p-3 text-xs hover:bg-accent"
+            >
+              <Mail className="h-5 w-5" />
+              Email
+            </a>
+            <a
+              href={`sms:?&body=${encodeURIComponent(message)}`}
+              className="flex flex-col items-center gap-1 rounded-xl border p-3 text-xs hover:bg-accent"
+            >
+              <span className="text-lg">📱</span>
+              SMS
+            </a>
+          </div>
+          <div className="rounded-xl bg-muted/40 p-3 text-center">
+            <div className="text-xs text-muted-foreground">Meeting code</div>
+            <div className="mt-1 font-mono text-lg font-semibold tracking-widest">{code}</div>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -555,7 +961,5 @@ function LobbyPreview() {
       .catch(() => {});
     return () => s?.getTracks().forEach((t) => t.stop());
   }, []);
-  return (
-    <video ref={ref} autoPlay playsInline muted className="h-full w-full object-cover" />
-  );
+  return <video ref={ref} autoPlay playsInline muted className="h-full w-full object-cover" />;
 }
