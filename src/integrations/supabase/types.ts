@@ -14,7 +14,110 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      meeting_messages: {
+        Row: {
+          content: string
+          created_at: string
+          id: string
+          meeting_id: string
+          sender_id: string | null
+          sender_name: string
+        }
+        Insert: {
+          content: string
+          created_at?: string
+          id?: string
+          meeting_id: string
+          sender_id?: string | null
+          sender_name: string
+        }
+        Update: {
+          content?: string
+          created_at?: string
+          id?: string
+          meeting_id?: string
+          sender_id?: string | null
+          sender_name?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "meeting_messages_meeting_id_fkey"
+            columns: ["meeting_id"]
+            isOneToOne: false
+            referencedRelation: "meetings"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      meetings: {
+        Row: {
+          created_at: string
+          duration_minutes: number | null
+          ended_at: string | null
+          host_id: string | null
+          id: string
+          password: string | null
+          room_code: string
+          scheduled_for: string | null
+          title: string
+          updated_at: string
+          waiting_room: boolean
+        }
+        Insert: {
+          created_at?: string
+          duration_minutes?: number | null
+          ended_at?: string | null
+          host_id?: string | null
+          id?: string
+          password?: string | null
+          room_code: string
+          scheduled_for?: string | null
+          title?: string
+          updated_at?: string
+          waiting_room?: boolean
+        }
+        Update: {
+          created_at?: string
+          duration_minutes?: number | null
+          ended_at?: string | null
+          host_id?: string | null
+          id?: string
+          password?: string | null
+          room_code?: string
+          scheduled_for?: string | null
+          title?: string
+          updated_at?: string
+          waiting_room?: boolean
+        }
+        Relationships: []
+      }
+      profiles: {
+        Row: {
+          avatar_url: string | null
+          created_at: string
+          display_name: string | null
+          email: string | null
+          id: string
+          updated_at: string
+        }
+        Insert: {
+          avatar_url?: string | null
+          created_at?: string
+          display_name?: string | null
+          email?: string | null
+          id: string
+          updated_at?: string
+        }
+        Update: {
+          avatar_url?: string | null
+          created_at?: string
+          display_name?: string | null
+          email?: string | null
+          id?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
