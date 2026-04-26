@@ -1,5 +1,6 @@
 import { Link } from "@tanstack/react-router";
-import { Video, LogOut, LayoutDashboard, User as UserIcon } from "lucide-react";
+import { LogOut, LayoutDashboard, User as UserIcon } from "lucide-react";
+import logo from "@/assets/linka-logo.png";
 import { useAuth } from "@/hooks/use-auth";
 import { Button } from "@/components/ui/button";
 import {
@@ -23,9 +24,7 @@ export function SiteHeader() {
     <header className="sticky top-0 z-40 w-full border-b border-border/60 bg-background/80 backdrop-blur-xl">
       <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
         <Link to="/" className="flex items-center gap-2">
-          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-primary shadow-glow">
-            <Video className="h-5 w-5 text-primary-foreground" strokeWidth={2.5} />
-          </div>
+          <img src={logo} alt="Linka logo" width={36} height={36} className="h-9 w-9" />
           <span className="text-lg font-semibold tracking-tight">Linka</span>
           <span className="hidden text-sm text-muted-foreground sm:inline">Meet</span>
         </Link>
