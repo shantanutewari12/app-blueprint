@@ -1,5 +1,5 @@
 import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Mic,
   MicOff,
@@ -119,11 +119,13 @@ function RoomPage() {
   // Load / auto-create meeting
   useEffect(() => {
     (async () => {
-      let { data, error } = await supabase
+      const { data: existingData, error } = await supabase
         .from("meetings")
         .select("id, room_code, title, host_id, password, ended_at")
         .eq("room_code", roomCode)
         .maybeSingle();
+
+      let data = existingData;
 
       if (!data && !error) {
         const { data: created, error: insErr } = await supabase
@@ -180,42 +182,45 @@ function RoomPage() {
     };
   }, [meeting]);
 
-  const initStream = async (cancelled = false) => {
-    try {
-      if (streamRef.current) {
-        setLocalStream(streamRef.current);
-        return;
-      }
-
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: true,
-        audio: true,
-      });
-      if (cancelled) {
-        stream.getTracks().forEach((t) => t.stop());
-        return;
-      }
-      setLocalStream(stream);
-      streamRef.current = stream;
-
-      stream.getAudioTracks().forEach((t) => (t.enabled = micOn));
-      stream.getVideoTracks().forEach((t) => (t.enabled = camOn));
-    } catch (err) {
-      console.error("Camera access error:", err);
+  const initStream = useCallback(
+    async (cancelled = false) => {
       try {
-        const audioStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        if (!cancelled) {
-          setLocalStream(audioStream);
-          streamRef.current = audioStream;
-          setCamOn(false);
+        if (streamRef.current) {
+          setLocalStream(streamRef.current);
+          return;
         }
-      } catch {
-        toast.error("Camera/mic blocked", {
-          description: "Please allow media permissions in your browser settings.",
+
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: true,
+          audio: true,
         });
+        if (cancelled) {
+          stream.getTracks().forEach((t) => t.stop());
+          return;
+        }
+        setLocalStream(stream);
+        streamRef.current = stream;
+
+        stream.getAudioTracks().forEach((t) => (t.enabled = micOn));
+        stream.getVideoTracks().forEach((t) => (t.enabled = camOn));
+      } catch (err) {
+        console.error("Camera access error:", err);
+        try {
+          const audioStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+          if (!cancelled) {
+            setLocalStream(audioStream);
+            streamRef.current = audioStream;
+            setCamOn(false);
+          }
+        } catch {
+          toast.error("Camera/mic blocked", {
+            description: "Please allow media permissions in your browser settings.",
+          });
+        }
       }
-    }
-  };
+    },
+    [micOn, camOn],
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -226,7 +231,7 @@ function RoomPage() {
       streamRef.current?.getTracks().forEach((t) => t.stop());
       streamRef.current = null;
     };
-  }, []);
+  }, [initStream]);
 
   // Sync video element when joined
   useEffect(() => {
@@ -817,11 +822,7 @@ function RoomPage() {
 
             {showPeople && (
               <div className="flex-1 space-y-1 overflow-y-auto p-2">
-                <PersonRow
-                  name={`${senderName} (You)`}
-                  host={user?.id === meeting?.host_id}
-                  micOn={micOn}
-                />
+                <PersonRow name={`${senderName} (You)`} host={false} micOn={micOn} />
                 {peerList.map((p) => (
                   <PersonRow key={p.peerId} name={p.name} micOn={p.micOn} />
                 ))}

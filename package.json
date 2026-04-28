@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite dev",
-    "build": "vite build && cp -r dist/client/* dist/ && rm -rf dist/client dist/server",
+    "build": "vite build && node -e \"const fs = require('fs'); if (fs.existsSync('dist/client')) { fs.cpSync('dist/client', 'dist', {recursive: true}); }\"",
     "build:dev": "vite build --mode development",
     "preview": "vite preview",
     "lint": "eslint .",
