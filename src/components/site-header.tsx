@@ -1,90 +1,32 @@
 import { Link } from "@tanstack/react-router";
 import { LogOut, LayoutDashboard, User as UserIcon } from "lucide-react";
-import logo from "@/assets/linka-logo.png";
-import { useAuth } from "@/hooks/use-auth";
+import logo from "@/assets/gather-logo.png";
 import { Button } from "@/components/ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 
 export function SiteHeader() {
-  const { user, signOut } = useAuth();
-  const initial = (user?.user_metadata?.full_name || user?.email || "U")
-    .toString()
-    .charAt(0)
-    .toUpperCase();
-
   return (
-    <header className="sticky top-0 z-40 w-full border-b border-border/60 bg-background/80 backdrop-blur-xl">
-      <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
-        <Link to="/" className="flex items-center gap-2">
-          <img src={logo} alt="Linka logo" width={36} height={36} className="h-9 w-9" />
-          <span className="text-lg font-semibold tracking-tight">Linka</span>
-          <span className="hidden text-sm text-muted-foreground sm:inline">Meet</span>
+    <header className="fixed top-4 left-1/2 z-50 w-[calc(100%-2rem)] max-w-7xl -translate-x-1/2 rounded-3xl border border-white/10 bg-white/5 px-4 py-2 backdrop-blur-2xl transition-all duration-300 hover:bg-white/10 sm:px-6">
+      <div className="flex h-14 items-center justify-between">
+        <Link to="/" className="group flex items-center gap-3">
+          <div className="relative h-10 w-10 overflow-hidden rounded-xl bg-gradient-primary p-0.5 shadow-lg transition-transform group-hover:scale-105">
+            <div className="flex h-full w-full items-center justify-center rounded-[10px] bg-background">
+              <img src={logo} alt="Gather" className="h-7 w-7 object-contain" />
+            </div>
+          </div>
+          <div className="flex flex-col leading-none">
+            <span className="text-xl font-bold tracking-tight text-foreground">Gather</span>
+            <span className="text-[10px] font-medium uppercase tracking-[0.2em] text-muted-foreground/60">Meeting</span>
+          </div>
         </Link>
 
-        <nav className="flex items-center gap-2">
-          {user ? (
-            <>
-              <Button asChild variant="ghost" size="sm" className="hidden sm:inline-flex">
-                <Link to="/dashboard">
-                  <LayoutDashboard className="mr-2 h-4 w-4" />
-                  My meetings
-                </Link>
-              </Button>
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <button className="rounded-full outline-none ring-offset-2 focus-visible:ring-2 focus-visible:ring-ring">
-                    <Avatar className="h-9 w-9">
-                      <AvatarImage src={user.user_metadata?.avatar_url} />
-                      <AvatarFallback className="bg-gradient-primary text-primary-foreground">
-                        {initial}
-                      </AvatarFallback>
-                    </Avatar>
-                  </button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-56">
-                  <DropdownMenuLabel>
-                    <div className="flex flex-col">
-                      <span className="text-sm font-medium">
-                        {user.user_metadata?.full_name || user.email}
-                      </span>
-                      <span className="text-xs text-muted-foreground">{user.email}</span>
-                    </div>
-                  </DropdownMenuLabel>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem asChild>
-                    <Link to="/dashboard">
-                      <LayoutDashboard className="mr-2 h-4 w-4" />
-                      My meetings
-                    </Link>
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => signOut()}>
-                    <LogOut className="mr-2 h-4 w-4" />
-                    Sign out
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </>
-          ) : (
-            <>
-              <Button asChild variant="ghost" size="sm">
-                <Link to="/login">
-                  <UserIcon className="mr-2 h-4 w-4" />
-                  Sign in
-                </Link>
-              </Button>
-              <Button asChild size="sm" className="bg-gradient-primary text-primary-foreground shadow-soft hover:opacity-90">
-                <Link to="/login">Get started</Link>
-              </Button>
-            </>
-          )}
+        <nav className="flex items-center gap-4">
+          <div className="hidden items-center gap-2 rounded-2xl border border-white/10 bg-white/5 px-4 py-1.5 text-xs font-semibold text-foreground/80 shadow-inner sm:flex">
+            <span className="h-2 w-2 rounded-full bg-success animate-pulse shadow-[0_0_8px_rgba(34,197,94,0.5)]" />
+            No login required
+          </div>
+          <Button asChild size="sm" className="h-10 rounded-xl bg-gradient-primary px-5 font-bold text-primary-foreground shadow-glow transition-all hover:scale-105 hover:opacity-95">
+            <Link to="/">New room</Link>
+          </Button>
         </nav>
       </div>
     </header>

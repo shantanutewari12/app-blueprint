@@ -30,13 +30,13 @@ export const Route = createRootRoute({
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "Linka — Free secure video meetings" },
+      { title: "Gather — Simple, instant video meetings" },
       {
         name: "description",
         content:
-          "Linka is a fast, simple video meeting app. Create instant rooms, share a link, and meet anyone — no download, no account required.",
+          "Gather is a fast, simple video meeting app. Create instant rooms, share a link, and meet anyone — no download, no account required.",
       },
-      { property: "og:title", content: "Linka — Free secure video meetings" },
+      { property: "og:title", content: "Gather — Simple, instant video meetings" },
       {
         property: "og:description",
         content: "Create a meeting in one click. Share the link. Talk face to face.",
@@ -44,7 +44,10 @@ export const Route = createRootRoute({
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
     ],
-    links: [{ rel: "stylesheet", href: appCss }],
+    links: [
+      { rel: "stylesheet", href: appCss },
+      { rel: "icon", type: "image/png", href: "/favicon.png" },
+    ],
   }),
   shellComponent: RootShell,
   component: RootComponent,

@@ -14,7 +14,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { normalizeRoomCode } from "@/lib/room";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
-import logo from "@/assets/linka-logo.png";
+import logo from "@/assets/gather-logo.png";
 import type { RealtimeChannel } from "@supabase/supabase-js";
 
 interface ChatMessage {
@@ -88,9 +88,9 @@ function RoomPage() {
   const [linkCopied, setLinkCopied] = useState(false);
   const [reactions, setReactions] = useState<{ id: number; emoji: string }[]>([]);
 
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [draft, setDraft] = useState("");
   const [peers, setPeers] = useState<Record<string, RemotePeer>>({});
+  const [localStream, setLocalStream] = useState<MediaStream | null>(null);
 
   const peerIdRef = useRef<string>(makePeerId());
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -138,6 +138,8 @@ function RoomPage() {
       }
       setMeeting(data);
       setLoading(false);
+      // Try to pre-warm camera if not already done
+      if (!streamRef.current) void initStream();
     })();
   }, [roomCode, user, navigate]);
 
@@ -173,12 +175,17 @@ function RoomPage() {
     };
   }, [meeting]);
 
-  // Acquire camera/mic when joined
+  // Manage local stream lifecycle
   useEffect(() => {
-    if (!joined) return;
     let cancelled = false;
-    (async () => {
+    const initStream = async () => {
       try {
+        // If we already have a stream, don't re-request
+        if (streamRef.current) {
+          setLocalStream(streamRef.current);
+          return;
+        }
+
         const stream = await navigator.mediaDevices.getUserMedia({
           video: true,
           audio: true,
@@ -187,30 +194,55 @@ function RoomPage() {
           stream.getTracks().forEach((t) => t.stop());
           return;
         }
+        setLocalStream(stream);
         streamRef.current = stream;
-        if (videoRef.current) videoRef.current.srcObject = stream;
+        
+        // Initial sync of mic/cam states
         stream.getAudioTracks().forEach((t) => (t.enabled = micOn));
         stream.getVideoTracks().forEach((t) => (t.enabled = camOn));
-      } catch {
-        toast.error("Camera/mic blocked", {
-          description: "Check browser permissions to share video & audio.",
-        });
+      } catch (err) {
+        console.error("Camera access error:", err);
+        // Fallback to audio only if video fails
+        try {
+          const audioStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+          if (!cancelled) {
+            setLocalStream(audioStream);
+            streamRef.current = audioStream;
+            setCamOn(false);
+          }
+        } catch {
+          toast.error("Camera/mic blocked", {
+            description: "Please allow media permissions in your browser settings.",
+          });
+        }
       }
-    })();
+    };
+
+    void initStream();
+
     return () => {
       cancelled = true;
       streamRef.current?.getTracks().forEach((t) => t.stop());
       streamRef.current = null;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [joined]);
+  }, []); // Only on mount
+
+  // Sync video element when joined
+  useEffect(() => {
+    if (joined && videoRef.current && localStream) {
+      videoRef.current.srcObject = localStream;
+      void videoRef.current.play().catch(() => {});
+    }
+  }, [joined, localStream]);
+
+  // Sync mic/cam states to stream tracks
+  useEffect(() => {
+    localStream?.getAudioTracks().forEach((t) => (t.enabled = micOn));
+  }, [micOn, localStream]);
 
   useEffect(() => {
-    streamRef.current?.getAudioTracks().forEach((t) => (t.enabled = micOn));
-  }, [micOn]);
-  useEffect(() => {
-    streamRef.current?.getVideoTracks().forEach((t) => (t.enabled = camOn));
-  }, [camOn]);
+    localStream?.getVideoTracks().forEach((t) => (t.enabled = camOn));
+  }, [camOn, localStream]);
 
   // WebRTC + Supabase Realtime presence/signaling
   useEffect(() => {
@@ -222,16 +254,32 @@ function RoomPage() {
       const pc = new RTCPeerConnection(ICE_SERVERS);
       pcsRef.current[remoteId] = pc;
 
-      streamRef.current?.getTracks().forEach((track) => {
-        if (streamRef.current) pc.addTrack(track, streamRef.current);
-      });
+      // Add tracks from current stream
+      const currentStream = streamRef.current;
+      if (currentStream) {
+        currentStream.getTracks().forEach((track) => {
+          pc.addTrack(track, currentStream);
+        });
+      }
 
       pc.ontrack = (e) => {
         const [remoteStream] = e.streams;
-        setPeers((p) => ({
-          ...p,
-          [remoteId]: { ...(p[remoteId] ?? { peerId: remoteId, name: "Guest", micOn: true, camOn: true, handRaised: false }), stream: remoteStream },
-        }));
+        setPeers((p) => {
+          if (p[remoteId]?.stream === remoteStream) return p;
+          return {
+            ...p,
+            [remoteId]: {
+              ...(p[remoteId] ?? {
+                peerId: remoteId,
+                name: "Guest",
+                micOn: true,
+                camOn: true,
+                handRaised: false,
+              }),
+              stream: remoteStream,
+            },
+          };
+        });
       };
 
       pc.onicecandidate = (e) => {
@@ -300,8 +348,13 @@ function RoomPage() {
 
     ch.on("presence", { event: "join" }, ({ key }) => {
       if (key === myId) return;
-      // tie-break: lower id initiates the call to avoid double offers
-      if (myId < key) void createPeer(key, true);
+      // If we don't have a stream yet, signaling will be incomplete. 
+      // But we can still initiate and tracks will be added later if we use transceivers,
+      // but here we just wait or re-sync.
+      if (myId < key) {
+        // small delay to ensure local media is ready
+        setTimeout(() => void createPeer(key, true), 500);
+      }
     });
 
     ch.on("presence", { event: "leave" }, ({ key }) => {
@@ -418,8 +471,8 @@ function RoomPage() {
     if (navigator.share) {
       try {
         await navigator.share({
-          title: "Join my Linka meeting",
-          text: `Join my meeting on Linka: ${roomCode}`,
+          title: "Join my Gather meeting",
+          text: `Join my meeting on Gather: ${roomCode}`,
           url: shareUrl,
         });
       } catch {
@@ -485,8 +538,8 @@ function RoomPage() {
       <div className="flex min-h-screen flex-col bg-call-bg text-white">
         <header className="flex items-center justify-between p-4">
           <Link to="/" className="flex items-center gap-2 text-sm text-white/70 hover:text-white">
-            <img src={logo} alt="Linka" width={28} height={28} className="h-7 w-7" />
-            Linka
+            <img src={logo} alt="Gather" width={28} height={28} className="h-7 w-7" />
+            Gather
           </Link>
           <button
             onClick={copyLink}
@@ -497,20 +550,28 @@ function RoomPage() {
           </button>
         </header>
 
-        <div className="grid flex-1 items-center gap-8 px-4 pb-10 lg:grid-cols-2 lg:px-12">
-          <div>
-            <div className="aspect-video overflow-hidden rounded-3xl bg-call-tile shadow-elevated">
-              <LobbyPreview />
+        <div className="mx-auto flex w-full max-w-2xl flex-1 flex-col items-center justify-center gap-10 px-4 pb-16">
+          <div className="w-full max-w-xl">
+            <div className="aspect-video overflow-hidden rounded-[2.5rem] border-4 border-white/5 bg-call-tile shadow-2xl ring-1 ring-white/10">
+              <LobbyPreview stream={localStream} camOn={camOn} name={senderName} />
+            </div>
+            <div className="mt-6 flex justify-center gap-4">
+              <ControlBtn active={micOn} onClick={() => setMicOn(v => !v)} label={micOn ? "Mute" : "Unmute"}>
+                {micOn ? <Mic className="h-6 w-6" /> : <MicOff className="h-6 w-6" />}
+              </ControlBtn>
+              <ControlBtn active={camOn} onClick={() => setCamOn(v => !v)} label={camOn ? "Stop video" : "Start video"}>
+                {camOn ? <VideoIcon className="h-6 w-6" /> : <VideoOff className="h-6 w-6" />}
+              </ControlBtn>
             </div>
           </div>
 
-          <div className="mx-auto w-full max-w-md">
-            <h1 className="text-3xl font-semibold tracking-tight">{meeting?.title}</h1>
-            <p className="mt-2 text-white/60">
-              Share this link to invite anyone — they don't need an account.
+          <div className="w-full max-w-md text-center">
+            <h1 className="text-4xl font-bold tracking-tight text-white sm:text-5xl">{meeting?.title}</h1>
+            <p className="mt-4 text-lg text-white/60">
+              Meeting ID: <span className="font-mono text-success">{roomCode}</span>
             </p>
-
-            <div className="mt-5 flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 p-2">
+            
+            <div className="mt-8 flex items-center gap-2 rounded-2xl border border-white/10 bg-white/5 p-2 backdrop-blur-sm">
               <Input
                 readOnly
                 value={shareUrl}
@@ -525,45 +586,26 @@ function RoomPage() {
                 {linkCopied ? <Check className="mr-1 h-4 w-4" /> : <Copy className="mr-1 h-4 w-4" />}
                 {linkCopied ? "Copied" : "Copy"}
               </Button>
-              <Button
-                onClick={nativeShare}
-                size="sm"
-                className="shrink-0 bg-gradient-primary text-primary-foreground"
-              >
-                <Share2 className="mr-1 h-4 w-4" />
-                Share
-              </Button>
             </div>
 
-            {!user && (
-              <div className="mt-5">
-                <label className="text-sm text-white/70">Your name</label>
-                <Input
-                  value={guestName}
-                  onChange={(e) => setGuestName(e.target.value)}
-                  placeholder="Enter your name"
-                  className="mt-1.5 border-white/15 bg-white/5 text-white placeholder:text-white/30"
-                />
-              </div>
-            )}
+            <div className="mt-8 text-left">
+              <label className="text-xs font-medium uppercase tracking-wider text-white/40">Your name</label>
+              <Input
+                value={guestName}
+                onChange={(e) => setGuestName(e.target.value)}
+                placeholder="How should we call you?"
+                className="mt-2 h-12 border-white/15 bg-white/5 text-lg text-white placeholder:text-white/20 focus:border-primary/50"
+              />
+            </div>
 
-            <div className="mt-5 flex flex-col gap-3 sm:flex-row">
+            <div className="mt-8">
               <Button
-                disabled={!user && !guestName.trim()}
+                disabled={!guestName.trim()}
                 onClick={() => setJoined(true)}
-                className="h-12 flex-1 bg-gradient-primary text-primary-foreground hover:opacity-95"
+                className="h-14 w-full rounded-2xl bg-gradient-primary text-lg font-semibold text-primary-foreground shadow-glow hover:opacity-95"
               >
-                Join now
+                Join meeting
               </Button>
-              {!user && (
-                <Button
-                  asChild
-                  variant="outline"
-                  className="h-12 border-white/20 bg-transparent text-white hover:bg-white/10"
-                >
-                  <Link to="/login">Sign in</Link>
-                </Button>
-              )}
             </div>
           </div>
         </div>
@@ -577,17 +619,18 @@ function RoomPage() {
   const totalTiles = peerList.length + 1;
   const gridCols =
     totalTiles <= 1 ? "grid-cols-1"
-    : totalTiles <= 4 ? "sm:grid-cols-2"
-    : totalTiles <= 9 ? "sm:grid-cols-2 md:grid-cols-3"
-    : "sm:grid-cols-3 md:grid-cols-4";
+    : totalTiles === 2 ? "grid-cols-2"
+    : totalTiles <= 4 ? "grid-cols-2"
+    : totalTiles <= 9 ? "grid-cols-2 md:grid-cols-3"
+    : "grid-cols-2 md:grid-cols-3 lg:grid-cols-4";
 
   return (
     <div className="flex h-screen flex-col bg-call-bg text-white">
       <header className="flex items-center justify-between border-b border-white/5 px-4 py-3">
         <div className="flex items-center gap-3">
           <Link to="/" className="flex items-center gap-2 text-sm text-white/70 hover:text-white">
-            <img src={logo} alt="Linka" width={24} height={24} className="h-6 w-6" />
-            Linka
+            <img src={logo} alt="Gather" width={24} height={24} className="h-6 w-6" />
+            Gather
           </Link>
           <span className="hidden text-white/40 sm:inline">·</span>
           <span className="hidden truncate text-sm font-medium sm:inline">{meeting?.title}</span>
@@ -615,15 +658,15 @@ function RoomPage() {
       </header>
 
       <div className="flex flex-1 overflow-hidden">
-        <div className="relative flex-1 p-3">
-          <div className={cn("grid h-full gap-2.5 grid-cols-1", gridCols)}>
+        <div className="relative flex-1 p-4 overflow-y-auto custom-scrollbar">
+          <div className={cn("mx-auto grid max-w-4xl gap-6", gridCols)}>
             <Tile name={`${senderName} (You)`} accent="bg-primary">
               <video
                 ref={videoRef}
                 autoPlay
                 playsInline
                 muted
-                className={cn("h-full w-full object-cover", !camOn && "hidden")}
+                className={cn("h-full w-full object-cover transition-opacity duration-500", !camOn ? "opacity-0" : "opacity-100")}
               />
               {!camOn && <Avatar name={senderName} />}
               {!micOn && (
@@ -821,10 +864,10 @@ function RoomPage() {
 
 function Tile({ name, children, accent }: { name: string; children: React.ReactNode; accent?: string }) {
   return (
-    <div className="relative overflow-hidden rounded-2xl bg-call-tile">
+    <div className="group relative aspect-video overflow-hidden rounded-[2.5rem] bg-white/5 border border-white/10 shadow-elevated transition-all hover:bg-white/10">
       {children}
-      <div className="absolute bottom-2 left-2 flex items-center gap-1.5 rounded-md bg-black/50 px-2 py-1 text-xs font-medium backdrop-blur">
-        {accent && <span className={cn("h-1.5 w-1.5 rounded-full", accent)} />}
+      <div className="absolute bottom-3 left-3 flex items-center gap-2 rounded-xl bg-black/60 px-3 py-1.5 text-xs font-semibold backdrop-blur-md border border-white/5">
+        {accent && <span className={cn("h-2 w-2 rounded-full animate-pulse", accent)} />}
         {name}
       </div>
     </div>
@@ -844,10 +887,21 @@ function Avatar({ name }: { name: string }) {
 function PeerVideo({ peer }: { peer: RemotePeer }) {
   const ref = useRef<HTMLVideoElement>(null);
   useEffect(() => {
-    if (ref.current && peer.stream) ref.current.srcObject = peer.stream;
+    if (ref.current && peer.stream) {
+      ref.current.srcObject = peer.stream;
+    }
   }, [peer.stream]);
+  
   if (!peer.stream || !peer.camOn) return <Avatar name={peer.name} />;
-  return <video ref={ref} autoPlay playsInline className="h-full w-full object-cover" />;
+  
+  return (
+    <video 
+      ref={ref} 
+      autoPlay 
+      playsInline 
+      className="h-full w-full object-cover transition-opacity duration-500" 
+    />
+  );
 }
 
 function ControlBtn({
@@ -861,8 +915,10 @@ function ControlBtn({
       title={label}
       aria-label={label}
       className={cn(
-        "flex h-11 w-11 items-center justify-center rounded-2xl transition",
-        active ? "bg-white/10 text-white hover:bg-white/15" : "bg-destructive/90 text-destructive-foreground hover:bg-destructive",
+        "flex h-12 w-12 items-center justify-center rounded-2xl transition-all duration-200 shadow-soft",
+        active 
+          ? "bg-white/10 text-white hover:bg-white/20 border border-white/10" 
+          : "bg-destructive text-white hover:bg-destructive/90 border border-destructive/20 shadow-glow",
       )}
     >
       {children}
@@ -890,7 +946,7 @@ function ShareDialog({
   open: boolean; onOpenChange: (v: boolean) => void; url: string; code: string;
 }) {
   const [copied, setCopied] = useState(false);
-  const message = `Join my Linka meeting (${code}): ${url}`;
+  const message = `Join my Gather meeting (${code}): ${url}`;
   const copy = async () => {
     await navigator.clipboard.writeText(url);
     setCopied(true);
@@ -924,7 +980,7 @@ function ShareDialog({
               WhatsApp
             </a>
             <a
-              href={`mailto:?subject=${encodeURIComponent("Join my Linka meeting")}&body=${encodeURIComponent(message)}`}
+              href={`mailto:?subject=${encodeURIComponent("Join my Gather meeting")}&body=${encodeURIComponent(message)}`}
               className="flex flex-col items-center gap-1 rounded-xl border p-3 text-xs hover:bg-accent"
             >
               <Mail className="h-5 w-5" />
@@ -948,18 +1004,18 @@ function ShareDialog({
   );
 }
 
-function LobbyPreview() {
+function LobbyPreview({ stream, camOn, name }: { stream: MediaStream | null; camOn: boolean; name: string }) {
   const ref = useRef<HTMLVideoElement>(null);
   useEffect(() => {
-    let s: MediaStream | undefined;
-    navigator.mediaDevices
-      .getUserMedia({ video: true, audio: false })
-      .then((stream) => {
-        s = stream;
-        if (ref.current) ref.current.srcObject = stream;
-      })
-      .catch(() => {});
-    return () => s?.getTracks().forEach((t) => t.stop());
-  }, []);
-  return <video ref={ref} autoPlay playsInline muted className="h-full w-full object-cover" />;
+    if (ref.current && stream) {
+      ref.current.srcObject = stream;
+      void ref.current.play().catch(() => {});
+    }
+  }, [stream]);
+
+  if (!camOn || !stream) {
+    return <Avatar name={name || "Guest"} />;
+  }
+
+  return <video ref={ref} autoPlay playsInline muted className="h-full w-full object-cover transition-opacity duration-500" />;
 }
