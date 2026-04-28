@@ -10,7 +10,14 @@ if (!fs.existsSync(assetsPath)) {
 }
 
 const files = fs.readdirSync(assetsPath);
-const mainJs = files.find((f) => f.startsWith("index-") && f.endsWith(".js"));
+
+// Sort JS files by size descending to find the main bundle
+const jsFiles = files
+  .filter((f) => f.startsWith("index-") && f.endsWith(".js"))
+  .map((f) => ({ name: f, size: fs.statSync(path.join(assetsPath, f)).size }))
+  .sort((a, b) => b.size - a.size);
+
+const mainJs = jsFiles.length > 0 ? jsFiles[0].name : null;
 const mainCss = files.find((f) => f.startsWith("styles-") && f.endsWith(".css"));
 
 if (!mainJs || !mainCss) {
