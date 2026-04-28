@@ -15,7 +15,9 @@ export function SiteHeader() {
           </div>
           <div className="flex flex-col leading-none">
             <span className="text-xl font-bold tracking-tight text-foreground">Gather</span>
-            <span className="text-[10px] font-medium uppercase tracking-[0.2em] text-muted-foreground/60">Meeting</span>
+            <span className="text-[10px] font-medium uppercase tracking-[0.2em] text-muted-foreground/60">
+              Meeting
+            </span>
           </div>
         </Link>
 
@@ -24,7 +26,11 @@ export function SiteHeader() {
             <span className="h-2 w-2 rounded-full bg-success animate-pulse shadow-[0_0_8px_rgba(34,197,94,0.5)]" />
             No login required
           </div>
-          <Button asChild size="sm" className="h-10 rounded-xl bg-gradient-primary px-5 font-bold text-primary-foreground shadow-glow transition-all hover:scale-105 hover:opacity-95">
+          <Button
+            asChild
+            size="sm"
+            className="h-10 rounded-xl bg-gradient-primary px-5 font-bold text-primary-foreground shadow-glow transition-all hover:scale-105 hover:opacity-95"
+          >
             <Link to="/">New room</Link>
           </Button>
         </nav>

@@ -1,15 +1,32 @@
 import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
-  Mic, MicOff, Video as VideoIcon, VideoOff, MonitorUp, MessageSquare,
-  Users, Hand, Smile, PhoneOff, Copy, Send, X, Share2, Mail, Check,
+  Mic,
+  MicOff,
+  Video as VideoIcon,
+  VideoOff,
+  MonitorUp,
+  MessageSquare,
+  Users,
+  Hand,
+  Smile,
+  PhoneOff,
+  Copy,
+  Send,
+  X,
+  Share2,
+  Mail,
+  Check,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
 } from "@/components/ui/dialog";
-import { useAuth } from "@/hooks/use-auth";
 import { supabase } from "@/integrations/supabase/client";
 import { normalizeRoomCode } from "@/lib/room";
 import { toast } from "sonner";
@@ -57,10 +74,7 @@ export const Route = createFileRoute("/room/$code")({
 
 const REACTIONS = ["👍", "❤️", "😂", "🎉", "👏", "🙌"];
 const ICE_SERVERS: RTCConfiguration = {
-  iceServers: [
-    { urls: "stun:stun.l.google.com:19302" },
-    { urls: "stun:stun1.l.google.com:19302" },
-  ],
+  iceServers: [{ urls: "stun:stun.l.google.com:19302" }, { urls: "stun:stun1.l.google.com:19302" }],
 };
 
 function makePeerId() {
@@ -70,7 +84,6 @@ function makePeerId() {
 function RoomPage() {
   const { code } = Route.useParams();
   const roomCode = normalizeRoomCode(code);
-  const { user } = useAuth();
   const navigate = useNavigate();
 
   const [meeting, setMeeting] = useState<MeetingRow | null>(null);
@@ -90,6 +103,7 @@ function RoomPage() {
 
   const [draft, setDraft] = useState("");
   const [peers, setPeers] = useState<Record<string, RemotePeer>>({});
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
 
   const peerIdRef = useRef<string>(makePeerId());
@@ -98,14 +112,7 @@ function RoomPage() {
   const channelRef = useRef<RealtimeChannel | null>(null);
   const pcsRef = useRef<Record<string, RTCPeerConnection>>({});
 
-  const senderName = useMemo(
-    () =>
-      user?.user_metadata?.full_name ||
-      user?.email?.split("@")[0] ||
-      guestName ||
-      "Guest",
-    [user, guestName],
-  );
+  const senderName = useMemo(() => guestName || "Guest", [guestName]);
 
   const shareUrl = typeof window !== "undefined" ? window.location.href : "";
 
@@ -124,7 +131,7 @@ function RoomPage() {
           .insert({
             room_code: roomCode,
             title: "Instant meeting",
-            host_id: user?.id ?? null,
+            host_id: null,
           })
           .select("id, room_code, title, host_id, password, ended_at")
           .single();
@@ -138,10 +145,8 @@ function RoomPage() {
       }
       setMeeting(data);
       setLoading(false);
-      // Try to pre-warm camera if not already done
-      if (!streamRef.current) void initStream();
     })();
-  }, [roomCode, user, navigate]);
+  }, [roomCode, navigate]);
 
   // Chat history + realtime messages
   useEffect(() => {
@@ -175,57 +180,53 @@ function RoomPage() {
     };
   }, [meeting]);
 
-  // Manage local stream lifecycle
+  const initStream = async (cancelled = false) => {
+    try {
+      if (streamRef.current) {
+        setLocalStream(streamRef.current);
+        return;
+      }
+
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: true,
+        audio: true,
+      });
+      if (cancelled) {
+        stream.getTracks().forEach((t) => t.stop());
+        return;
+      }
+      setLocalStream(stream);
+      streamRef.current = stream;
+
+      stream.getAudioTracks().forEach((t) => (t.enabled = micOn));
+      stream.getVideoTracks().forEach((t) => (t.enabled = camOn));
+    } catch (err) {
+      console.error("Camera access error:", err);
+      try {
+        const audioStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        if (!cancelled) {
+          setLocalStream(audioStream);
+          streamRef.current = audioStream;
+          setCamOn(false);
+        }
+      } catch {
+        toast.error("Camera/mic blocked", {
+          description: "Please allow media permissions in your browser settings.",
+        });
+      }
+    }
+  };
+
   useEffect(() => {
     let cancelled = false;
-    const initStream = async () => {
-      try {
-        // If we already have a stream, don't re-request
-        if (streamRef.current) {
-          setLocalStream(streamRef.current);
-          return;
-        }
-
-        const stream = await navigator.mediaDevices.getUserMedia({
-          video: true,
-          audio: true,
-        });
-        if (cancelled) {
-          stream.getTracks().forEach((t) => t.stop());
-          return;
-        }
-        setLocalStream(stream);
-        streamRef.current = stream;
-        
-        // Initial sync of mic/cam states
-        stream.getAudioTracks().forEach((t) => (t.enabled = micOn));
-        stream.getVideoTracks().forEach((t) => (t.enabled = camOn));
-      } catch (err) {
-        console.error("Camera access error:", err);
-        // Fallback to audio only if video fails
-        try {
-          const audioStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-          if (!cancelled) {
-            setLocalStream(audioStream);
-            streamRef.current = audioStream;
-            setCamOn(false);
-          }
-        } catch {
-          toast.error("Camera/mic blocked", {
-            description: "Please allow media permissions in your browser settings.",
-          });
-        }
-      }
-    };
-
-    void initStream();
+    void initStream(cancelled);
 
     return () => {
       cancelled = true;
       streamRef.current?.getTracks().forEach((t) => t.stop());
       streamRef.current = null;
     };
-  }, []); // Only on mount
+  }, []);
 
   // Sync video element when joined
   useEffect(() => {
@@ -348,7 +349,7 @@ function RoomPage() {
 
     ch.on("presence", { event: "join" }, ({ key }) => {
       if (key === myId) return;
-      // If we don't have a stream yet, signaling will be incomplete. 
+      // If we don't have a stream yet, signaling will be incomplete.
       // But we can still initiate and tracks will be added later if we use transceivers,
       // but here we just wait or re-sync.
       if (myId < key) {
@@ -446,7 +447,7 @@ function RoomPage() {
     setDraft("");
     const { error } = await supabase.from("meeting_messages").insert({
       meeting_id: meeting.id,
-      sender_id: user?.id ?? null,
+      sender_id: null,
       sender_name: senderName,
       content,
     });
@@ -495,13 +496,17 @@ function RoomPage() {
       try {
         const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
         replaceLocalStream(stream);
-      } catch { /* ignore */ }
+      } catch {
+        /* ignore */
+      }
       return;
     }
     try {
-      const screen = await (navigator.mediaDevices as MediaDevices & {
-        getDisplayMedia: (c: MediaStreamConstraints) => Promise<MediaStream>;
-      }).getDisplayMedia({ video: true });
+      const screen = await (
+        navigator.mediaDevices as MediaDevices & {
+          getDisplayMedia: (c: MediaStreamConstraints) => Promise<MediaStream>;
+        }
+      ).getDisplayMedia({ video: true });
       // Keep mic from current stream
       const audio = streamRef.current?.getAudioTracks()[0];
       if (audio) screen.addTrack(audio);
@@ -556,21 +561,31 @@ function RoomPage() {
               <LobbyPreview stream={localStream} camOn={camOn} name={senderName} />
             </div>
             <div className="mt-6 flex justify-center gap-4">
-              <ControlBtn active={micOn} onClick={() => setMicOn(v => !v)} label={micOn ? "Mute" : "Unmute"}>
+              <ControlBtn
+                active={micOn}
+                onClick={() => setMicOn((v) => !v)}
+                label={micOn ? "Mute" : "Unmute"}
+              >
                 {micOn ? <Mic className="h-6 w-6" /> : <MicOff className="h-6 w-6" />}
               </ControlBtn>
-              <ControlBtn active={camOn} onClick={() => setCamOn(v => !v)} label={camOn ? "Stop video" : "Start video"}>
+              <ControlBtn
+                active={camOn}
+                onClick={() => setCamOn((v) => !v)}
+                label={camOn ? "Stop video" : "Start video"}
+              >
                 {camOn ? <VideoIcon className="h-6 w-6" /> : <VideoOff className="h-6 w-6" />}
               </ControlBtn>
             </div>
           </div>
 
           <div className="w-full max-w-md text-center">
-            <h1 className="text-4xl font-bold tracking-tight text-white sm:text-5xl">{meeting?.title}</h1>
+            <h1 className="text-4xl font-bold tracking-tight text-white sm:text-5xl">
+              {meeting?.title}
+            </h1>
             <p className="mt-4 text-lg text-white/60">
               Meeting ID: <span className="font-mono text-success">{roomCode}</span>
             </p>
-            
+
             <div className="mt-8 flex items-center gap-2 rounded-2xl border border-white/10 bg-white/5 p-2 backdrop-blur-sm">
               <Input
                 readOnly
@@ -583,13 +598,19 @@ function RoomPage() {
                 variant="secondary"
                 className="shrink-0 bg-white/10 text-white hover:bg-white/20"
               >
-                {linkCopied ? <Check className="mr-1 h-4 w-4" /> : <Copy className="mr-1 h-4 w-4" />}
+                {linkCopied ? (
+                  <Check className="mr-1 h-4 w-4" />
+                ) : (
+                  <Copy className="mr-1 h-4 w-4" />
+                )}
                 {linkCopied ? "Copied" : "Copy"}
               </Button>
             </div>
 
             <div className="mt-8 text-left">
-              <label className="text-xs font-medium uppercase tracking-wider text-white/40">Your name</label>
+              <label className="text-xs font-medium uppercase tracking-wider text-white/40">
+                Your name
+              </label>
               <Input
                 value={guestName}
                 onChange={(e) => setGuestName(e.target.value)}
@@ -618,11 +639,15 @@ function RoomPage() {
   const peerList = Object.values(peers);
   const totalTiles = peerList.length + 1;
   const gridCols =
-    totalTiles <= 1 ? "grid-cols-1"
-    : totalTiles === 2 ? "grid-cols-2"
-    : totalTiles <= 4 ? "grid-cols-2"
-    : totalTiles <= 9 ? "grid-cols-2 md:grid-cols-3"
-    : "grid-cols-2 md:grid-cols-3 lg:grid-cols-4";
+    totalTiles <= 1
+      ? "grid-cols-1"
+      : totalTiles === 2
+        ? "grid-cols-2"
+        : totalTiles <= 4
+          ? "grid-cols-2"
+          : totalTiles <= 9
+            ? "grid-cols-2 md:grid-cols-3"
+            : "grid-cols-2 md:grid-cols-3 lg:grid-cols-4";
 
   return (
     <div className="flex h-screen flex-col bg-call-bg text-white">
@@ -666,7 +691,10 @@ function RoomPage() {
                 autoPlay
                 playsInline
                 muted
-                className={cn("h-full w-full object-cover transition-opacity duration-500", !camOn ? "opacity-0" : "opacity-100")}
+                className={cn(
+                  "h-full w-full object-cover transition-opacity duration-500",
+                  !camOn ? "opacity-0" : "opacity-100",
+                )}
               />
               {!camOn && <Avatar name={senderName} />}
               {!micOn && (
@@ -722,7 +750,7 @@ function RoomPage() {
               <div
                 key={r.id}
                 className="absolute bottom-10 left-1/2 -translate-x-1/2 animate-[float_2.4s_ease-out_forwards] text-4xl"
-                style={{ ['--x' as never]: `${(Math.random() - 0.5) * 200}px` }}
+                style={{ ["--x" as never]: `${(Math.random() - 0.5) * 200}px` }}
               >
                 {r.emoji}
               </div>
@@ -735,7 +763,10 @@ function RoomPage() {
             <div className="flex items-center justify-between border-b border-white/5 px-4 py-3">
               <span className="font-medium">{showChat ? "Chat" : "People"}</span>
               <button
-                onClick={() => { setShowChat(false); setShowPeople(false); }}
+                onClick={() => {
+                  setShowChat(false);
+                  setShowPeople(false);
+                }}
                 className="text-white/60 hover:text-white"
               >
                 <X className="h-4 w-4" />
@@ -753,7 +784,10 @@ function RoomPage() {
                       <div className="text-xs font-medium text-white/70">
                         {m.sender_name}
                         <span className="ml-2 text-white/30">
-                          {new Date(m.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                          {new Date(m.created_at).toLocaleTimeString([], {
+                            hour: "2-digit",
+                            minute: "2-digit",
+                          })}
                         </span>
                       </div>
                       <div className="mt-0.5 break-words text-sm">{m.content}</div>
@@ -783,7 +817,11 @@ function RoomPage() {
 
             {showPeople && (
               <div className="flex-1 space-y-1 overflow-y-auto p-2">
-                <PersonRow name={`${senderName} (You)`} host={user?.id === meeting?.host_id} micOn={micOn} />
+                <PersonRow
+                  name={`${senderName} (You)`}
+                  host={user?.id === meeting?.host_id}
+                  micOn={micOn}
+                />
                 {peerList.map((p) => (
                   <PersonRow key={p.peerId} name={p.name} micOn={p.micOn} />
                 ))}
@@ -801,16 +839,28 @@ function RoomPage() {
           {new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
         </div>
         <div className="mx-auto flex items-center gap-2">
-          <ControlBtn active={micOn} onClick={() => setMicOn((v) => !v)} label={micOn ? "Mute" : "Unmute"}>
+          <ControlBtn
+            active={micOn}
+            onClick={() => setMicOn((v) => !v)}
+            label={micOn ? "Mute" : "Unmute"}
+          >
             {micOn ? <Mic className="h-5 w-5" /> : <MicOff className="h-5 w-5" />}
           </ControlBtn>
-          <ControlBtn active={camOn} onClick={() => setCamOn((v) => !v)} label={camOn ? "Stop video" : "Start video"}>
+          <ControlBtn
+            active={camOn}
+            onClick={() => setCamOn((v) => !v)}
+            label={camOn ? "Stop video" : "Start video"}
+          >
             {camOn ? <VideoIcon className="h-5 w-5" /> : <VideoOff className="h-5 w-5" />}
           </ControlBtn>
           <ControlBtn active={!screenSharing} onClick={toggleScreenShare} label="Share screen">
             <MonitorUp className="h-5 w-5" />
           </ControlBtn>
-          <ControlBtn active={!handRaised} onClick={() => setHandRaised((v) => !v)} label="Raise hand">
+          <ControlBtn
+            active={!handRaised}
+            onClick={() => setHandRaised((v) => !v)}
+            label="Raise hand"
+          >
             <Hand className="h-5 w-5" />
           </ControlBtn>
 
@@ -831,10 +881,24 @@ function RoomPage() {
             </div>
           </div>
 
-          <ControlBtn active onClick={() => { setShowChat((v) => !v); setShowPeople(false); }} label="Chat">
+          <ControlBtn
+            active
+            onClick={() => {
+              setShowChat((v) => !v);
+              setShowPeople(false);
+            }}
+            label="Chat"
+          >
             <MessageSquare className="h-5 w-5" />
           </ControlBtn>
-          <ControlBtn active onClick={() => { setShowPeople((v) => !v); setShowChat(false); }} label="People">
+          <ControlBtn
+            active
+            onClick={() => {
+              setShowPeople((v) => !v);
+              setShowChat(false);
+            }}
+            label="People"
+          >
             <Users className="h-5 w-5" />
           </ControlBtn>
 
@@ -862,7 +926,15 @@ function RoomPage() {
   );
 }
 
-function Tile({ name, children, accent }: { name: string; children: React.ReactNode; accent?: string }) {
+function Tile({
+  name,
+  children,
+  accent,
+}: {
+  name: string;
+  children: React.ReactNode;
+  accent?: string;
+}) {
   return (
     <div className="group relative aspect-video overflow-hidden rounded-[2.5rem] bg-white/5 border border-white/10 shadow-elevated transition-all hover:bg-white/10">
       {children}
@@ -891,23 +963,29 @@ function PeerVideo({ peer }: { peer: RemotePeer }) {
       ref.current.srcObject = peer.stream;
     }
   }, [peer.stream]);
-  
+
   if (!peer.stream || !peer.camOn) return <Avatar name={peer.name} />;
-  
+
   return (
-    <video 
-      ref={ref} 
-      autoPlay 
-      playsInline 
-      className="h-full w-full object-cover transition-opacity duration-500" 
+    <video
+      ref={ref}
+      autoPlay
+      playsInline
+      className="h-full w-full object-cover transition-opacity duration-500"
     />
   );
 }
 
 function ControlBtn({
-  children, active, onClick, label,
+  children,
+  active,
+  onClick,
+  label,
 }: {
-  children: React.ReactNode; active: boolean; onClick: () => void; label: string;
+  children: React.ReactNode;
+  active: boolean;
+  onClick: () => void;
+  label: string;
 }) {
   return (
     <button
@@ -916,8 +994,8 @@ function ControlBtn({
       aria-label={label}
       className={cn(
         "flex h-12 w-12 items-center justify-center rounded-2xl transition-all duration-200 shadow-soft",
-        active 
-          ? "bg-white/10 text-white hover:bg-white/20 border border-white/10" 
+        active
+          ? "bg-white/10 text-white hover:bg-white/20 border border-white/10"
           : "bg-destructive text-white hover:bg-destructive/90 border border-destructive/20 shadow-glow",
       )}
     >
@@ -926,24 +1004,43 @@ function ControlBtn({
   );
 }
 
-function PersonRow({ name, host, micOn = true }: { name: string; host?: boolean; micOn?: boolean }) {
+function PersonRow({
+  name,
+  host,
+  micOn = true,
+}: {
+  name: string;
+  host?: boolean;
+  micOn?: boolean;
+}) {
   return (
     <div className="flex items-center gap-3 rounded-xl px-3 py-2 hover:bg-white/5">
       <div className="flex h-8 w-8 items-center justify-center rounded-full bg-gradient-primary text-xs font-semibold text-primary-foreground">
         {name.charAt(0).toUpperCase()}
       </div>
       <div className="flex-1 truncate text-sm">
-        {name}{host && <span className="ml-2 text-xs text-white/40">Host</span>}
+        {name}
+        {host && <span className="ml-2 text-xs text-white/40">Host</span>}
       </div>
-      {micOn ? <Mic className="h-3.5 w-3.5 text-white/50" /> : <MicOff className="h-3.5 w-3.5 text-destructive" />}
+      {micOn ? (
+        <Mic className="h-3.5 w-3.5 text-white/50" />
+      ) : (
+        <MicOff className="h-3.5 w-3.5 text-destructive" />
+      )}
     </div>
   );
 }
 
 function ShareDialog({
-  open, onOpenChange, url, code,
+  open,
+  onOpenChange,
+  url,
+  code,
 }: {
-  open: boolean; onOpenChange: (v: boolean) => void; url: string; code: string;
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
+  url: string;
+  code: string;
 }) {
   const [copied, setCopied] = useState(false);
   const message = `Join my Gather meeting (${code}): ${url}`;
@@ -957,14 +1054,16 @@ function ShareDialog({
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>Invite to your meeting</DialogTitle>
-          <DialogDescription>
-            Anyone with this link can join — no signup needed.
-          </DialogDescription>
+          <DialogDescription>Anyone with this link can join — no signup needed.</DialogDescription>
         </DialogHeader>
         <div className="mt-2 space-y-3">
           <div className="flex items-center gap-2 rounded-xl border bg-muted/40 p-2">
             <Input readOnly value={url} className="border-0 bg-transparent focus-visible:ring-0" />
-            <Button onClick={copy} size="sm" className="shrink-0 bg-gradient-primary text-primary-foreground">
+            <Button
+              onClick={copy}
+              size="sm"
+              className="shrink-0 bg-gradient-primary text-primary-foreground"
+            >
               {copied ? <Check className="mr-1 h-4 w-4" /> : <Copy className="mr-1 h-4 w-4" />}
               {copied ? "Copied" : "Copy"}
             </Button>
@@ -1004,7 +1103,15 @@ function ShareDialog({
   );
 }
 
-function LobbyPreview({ stream, camOn, name }: { stream: MediaStream | null; camOn: boolean; name: string }) {
+function LobbyPreview({
+  stream,
+  camOn,
+  name,
+}: {
+  stream: MediaStream | null;
+  camOn: boolean;
+  name: string;
+}) {
   const ref = useRef<HTMLVideoElement>(null);
   useEffect(() => {
     if (ref.current && stream) {
@@ -1017,5 +1124,13 @@ function LobbyPreview({ stream, camOn, name }: { stream: MediaStream | null; cam
     return <Avatar name={name || "Guest"} />;
   }
 
-  return <video ref={ref} autoPlay playsInline muted className="h-full w-full object-cover transition-opacity duration-500" />;
+  return (
+    <video
+      ref={ref}
+      autoPlay
+      playsInline
+      muted
+      className="h-full w-full object-cover transition-opacity duration-500"
+    />
+  );
 }

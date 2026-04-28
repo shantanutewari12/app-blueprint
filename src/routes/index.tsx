@@ -1,6 +1,20 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
-import { Video, Video as VideoIcon, Link2, Calendar, Shield, Sparkles, Users, MessageSquare, Plus, Check, Mic, PhoneOff, Share2 } from "lucide-react";
+import {
+  Video,
+  Video as VideoIcon,
+  Link2,
+  Calendar,
+  Shield,
+  Sparkles,
+  Users,
+  MessageSquare,
+  Plus,
+  Check,
+  Mic,
+  PhoneOff,
+  Share2,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { SiteHeader } from "@/components/site-header";
@@ -71,7 +85,10 @@ function Landing() {
               playsInline
               className="h-full w-full object-cover opacity-30 grayscale-[0.5] contrast-[1.2]"
             >
-              <source src="https://assets.mixkit.co/videos/preview/mixkit-abstract-flowing-purple-and-blue-gradient-background-video-41227-large.mp4" type="video/mp4" />
+              <source
+                src="https://assets.mixkit.co/videos/preview/mixkit-abstract-flowing-purple-and-blue-gradient-background-video-41227-large.mp4"
+                type="video/mp4"
+              />
             </video>
             <div className="absolute inset-0 bg-gradient-to-b from-background via-background/60 to-background" />
             <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,transparent_0%,rgba(0,0,0,0.4)_100%)]" />
@@ -81,7 +98,9 @@ function Landing() {
             <div className="text-center animate-in fade-in slide-in-from-bottom-10 duration-1000 ease-out">
               <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-4 py-1.5 text-sm font-semibold backdrop-blur-md shadow-2xl">
                 <Sparkles className="h-4 w-4 text-primary animate-pulse" />
-                <span className="bg-gradient-primary bg-clip-text text-transparent">The world's fastest way to meet</span>
+                <span className="bg-gradient-primary bg-clip-text text-transparent">
+                  The world's fastest way to meet
+                </span>
               </div>
               <h1 className="mt-8 text-6xl font-black leading-[0.95] tracking-tighter sm:text-8xl lg:text-9xl">
                 Meetings <br />
@@ -90,8 +109,10 @@ function Landing() {
                 </span>
               </h1>
               <p className="mx-auto mt-10 max-w-2xl text-xl font-medium text-muted-foreground/80 sm:text-2xl">
-                No accounts. No downloads. Just click, share, and talk. 
-                <span className="mt-4 block text-foreground font-bold tracking-tight">Gather is how modern teams connect.</span>
+                No accounts. No downloads. Just click, share, and talk.
+                <span className="mt-4 block text-foreground font-bold tracking-tight">
+                  Gather is how modern teams connect.
+                </span>
               </p>
 
               <div className="mt-12 flex flex-col items-center justify-center gap-4 sm:flex-row">
@@ -114,7 +135,11 @@ function Landing() {
                     placeholder="Enter room code"
                     className="h-full border-0 bg-transparent text-lg font-medium placeholder:text-muted-foreground/50 focus-visible:ring-0"
                   />
-                  <Button onClick={handleJoin} variant="secondary" className="h-full rounded-xl px-6 font-bold">
+                  <Button
+                    onClick={handleJoin}
+                    variant="secondary"
+                    className="h-full rounded-xl px-6 font-bold"
+                  >
                     Join
                   </Button>
                 </div>
@@ -151,7 +176,13 @@ function Landing() {
                       </div>
                       <div className="absolute bottom-10 left-1/2 -translate-x-1/2 flex items-center gap-4 rounded-3xl bg-black/80 p-4 border border-white/10 backdrop-blur-2xl shadow-2xl">
                         {[Mic, VideoIcon, Share2, MessageSquare, PhoneOff].map((Icon, i) => (
-                          <div key={i} className={cn("h-12 w-12 flex items-center justify-center rounded-2xl transition-colors", i === 4 ? "bg-destructive text-white" : "bg-white/10 text-white")}>
+                          <div
+                            key={i}
+                            className={cn(
+                              "h-12 w-12 flex items-center justify-center rounded-2xl transition-colors",
+                              i === 4 ? "bg-destructive text-white" : "bg-white/10 text-white",
+                            )}
+                          >
                             <Icon className="h-6 w-6" />
                           </div>
                         ))}
@@ -169,31 +200,41 @@ function Landing() {
           <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
             <div className="text-center">
               <h2 className="text-3xl font-black sm:text-5xl">Loved by fast-moving teams.</h2>
-              <p className="mt-4 text-lg text-muted-foreground">Don't take our word for it. Listen to our users.</p>
+              <p className="mt-4 text-lg text-muted-foreground">
+                Don't take our word for it. Listen to our users.
+              </p>
             </div>
             <div className="mt-16 grid gap-8 md:grid-cols-3">
               {[
                 {
-                  quote: "Gather is literally the only tool we use for quick syncs now. No more 'wait, who has the invite?'",
+                  quote:
+                    "Gather is literally the only tool we use for quick syncs now. No more 'wait, who has the invite?'",
                   author: "Sarah Chen",
                   role: "Product Lead @ Linear",
-                  avatar: "SC"
+                  avatar: "SC",
                 },
                 {
-                  quote: "The 'no-login' thing is a game changer for client meetings. It makes us look so much more professional.",
+                  quote:
+                    "The 'no-login' thing is a game changer for client meetings. It makes us look so much more professional.",
                   author: "Marcus Miller",
                   role: "Founder @ DesignLabs",
-                  avatar: "MM"
+                  avatar: "MM",
                 },
                 {
-                  quote: "I can't believe it's this fast. From idea to meeting in literally 2 seconds. Best video tool out there.",
+                  quote:
+                    "I can't believe it's this fast. From idea to meeting in literally 2 seconds. Best video tool out there.",
                   author: "Alex Rivera",
                   role: "CTO @ Vercel",
-                  avatar: "AR"
-                }
+                  avatar: "AR",
+                },
               ].map((t, i) => (
-                <div key={i} className="rounded-[2.5rem] border border-white/10 bg-white/5 p-10 backdrop-blur-md transition-transform hover:-translate-y-2">
-                  <p className="text-xl font-medium leading-relaxed italic text-foreground/90">"{t.quote}"</p>
+                <div
+                  key={i}
+                  className="rounded-[2.5rem] border border-white/10 bg-white/5 p-10 backdrop-blur-md transition-transform hover:-translate-y-2"
+                >
+                  <p className="text-xl font-medium leading-relaxed italic text-foreground/90">
+                    "{t.quote}"
+                  </p>
                   <div className="mt-8 flex items-center gap-4">
                     <div className="flex h-12 w-12 items-center justify-center rounded-full bg-gradient-primary text-sm font-bold text-white">
                       {t.avatar}
@@ -212,44 +253,54 @@ function Landing() {
         {/* Features Grid */}
         <section className="py-24">
           <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-             <div className="grid gap-12 lg:grid-cols-2 lg:items-center">
-                <div>
-                  <h2 className="text-4xl font-black leading-tight sm:text-6xl">
-                    Built for the <br />
-                    <span className="text-primary">speed of thought.</span>
-                  </h2>
-                  <p className="mt-6 text-xl text-muted-foreground leading-relaxed">
-                    We've optimized every single millisecond of the experience. From the moment you land on the page to the first 'hello', Gather stays out of your way.
-                  </p>
-                  <div className="mt-10 space-y-6">
-                    {[
-                      { title: "One-Click Rooms", desc: "No configuration needed. Instant peer-to-peer connection." },
-                      { title: "High Fidelity Video", desc: "Crystal clear 4K video with ultra-low latency." },
-                      { title: "Universal Compatibility", desc: "Works on every browser and device. No exceptions." }
-                    ].map((item, i) => (
-                      <div key={i} className="flex gap-4">
-                        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-success/20 text-success">
-                          <Check className="h-5 w-5" />
-                        </div>
-                        <div>
-                          <h3 className="text-lg font-bold">{item.title}</h3>
-                          <p className="text-muted-foreground">{item.desc}</p>
-                        </div>
+            <div className="grid gap-12 lg:grid-cols-2 lg:items-center">
+              <div>
+                <h2 className="text-4xl font-black leading-tight sm:text-6xl">
+                  Built for the <br />
+                  <span className="text-primary">speed of thought.</span>
+                </h2>
+                <p className="mt-6 text-xl text-muted-foreground leading-relaxed">
+                  We've optimized every single millisecond of the experience. From the moment you
+                  land on the page to the first 'hello', Gather stays out of your way.
+                </p>
+                <div className="mt-10 space-y-6">
+                  {[
+                    {
+                      title: "One-Click Rooms",
+                      desc: "No configuration needed. Instant peer-to-peer connection.",
+                    },
+                    {
+                      title: "High Fidelity Video",
+                      desc: "Crystal clear 4K video with ultra-low latency.",
+                    },
+                    {
+                      title: "Universal Compatibility",
+                      desc: "Works on every browser and device. No exceptions.",
+                    },
+                  ].map((item, i) => (
+                    <div key={i} className="flex gap-4">
+                      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-success/20 text-success">
+                        <Check className="h-5 w-5" />
                       </div>
-                    ))}
-                  </div>
+                      <div>
+                        <h3 className="text-lg font-bold">{item.title}</h3>
+                        <p className="text-muted-foreground">{item.desc}</p>
+                      </div>
+                    </div>
+                  ))}
                 </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="mt-12 space-y-4">
-                    <div className="aspect-square rounded-[2rem] bg-primary/20 blur-sm" />
-                    <div className="aspect-[4/3] rounded-[2rem] bg-secondary/10" />
-                  </div>
-                  <div className="space-y-4">
-                    <div className="aspect-[4/3] rounded-[2rem] bg-success/10" />
-                    <div className="aspect-square rounded-[2rem] bg-warning/20 blur-sm" />
-                  </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="mt-12 space-y-4">
+                  <div className="aspect-square rounded-[2rem] bg-primary/20 blur-sm" />
+                  <div className="aspect-[4/3] rounded-[2rem] bg-secondary/10" />
                 </div>
-             </div>
+                <div className="space-y-4">
+                  <div className="aspect-[4/3] rounded-[2rem] bg-success/10" />
+                  <div className="aspect-square rounded-[2rem] bg-warning/20 blur-sm" />
+                </div>
+              </div>
+            </div>
           </div>
         </section>
       </main>
@@ -266,10 +317,18 @@ function Landing() {
               <span className="text-xl font-black tracking-tighter">Gather</span>
             </div>
             <div className="flex gap-8 text-sm font-medium text-muted-foreground">
-              <a href="#" className="hover:text-foreground">Terms</a>
-              <a href="#" className="hover:text-foreground">Privacy</a>
-              <a href="#" className="hover:text-foreground">Security</a>
-              <a href="#" className="hover:text-foreground">Open Source</a>
+              <a href="#" className="hover:text-foreground">
+                Terms
+              </a>
+              <a href="#" className="hover:text-foreground">
+                Privacy
+              </a>
+              <a href="#" className="hover:text-foreground">
+                Security
+              </a>
+              <a href="#" className="hover:text-foreground">
+                Open Source
+              </a>
             </div>
             <div className="text-sm text-muted-foreground">
               © {new Date().getFullYear()} Gather Technologies.

@@ -79,7 +79,9 @@ function DashboardPage() {
 
   if (authLoading || !user) return null;
 
-  const upcoming = meetings.filter((m) => m.scheduled_for && new Date(m.scheduled_for) > new Date());
+  const upcoming = meetings.filter(
+    (m) => m.scheduled_for && new Date(m.scheduled_for) > new Date(),
+  );
   const others = meetings.filter((m) => !upcoming.includes(m));
 
   return (
@@ -100,7 +102,10 @@ function DashboardPage() {
                 Schedule
               </Link>
             </Button>
-            <Button onClick={createInstant} className="bg-gradient-primary text-primary-foreground hover:opacity-95">
+            <Button
+              onClick={createInstant}
+              className="bg-gradient-primary text-primary-foreground hover:opacity-95"
+            >
               <Plus className="mr-2 h-4 w-4" />
               New meeting
             </Button>
@@ -116,7 +121,9 @@ function DashboardPage() {
             {meetings.length === 0 && (
               <div className="mt-10 rounded-2xl border border-dashed border-border bg-surface p-10 text-center">
                 <Video className="mx-auto h-10 w-10 text-muted-foreground" />
-                <p className="mt-3 text-sm text-muted-foreground">No meetings yet. Create your first one!</p>
+                <p className="mt-3 text-sm text-muted-foreground">
+                  No meetings yet. Create your first one!
+                </p>
               </div>
             )}
           </>
@@ -140,7 +147,9 @@ function Section({
   if (meetings.length === 0) return null;
   return (
     <section className="mt-10">
-      <h2 className="text-sm font-medium uppercase tracking-wider text-muted-foreground">{title}</h2>
+      <h2 className="text-sm font-medium uppercase tracking-wider text-muted-foreground">
+        {title}
+      </h2>
       <div className="mt-3 divide-y divide-border rounded-2xl border border-border bg-card shadow-soft">
         {meetings.map((m) => (
           <div key={m.id} className="flex flex-wrap items-center gap-3 p-4 sm:gap-4">
@@ -158,7 +167,12 @@ function Section({
               </div>
             </div>
             <div className="flex gap-1">
-              <Button variant="ghost" size="icon" onClick={() => onCopy(m.room_code)} title="Copy link">
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => onCopy(m.room_code)}
+                title="Copy link"
+              >
                 <Copy className="h-4 w-4" />
               </Button>
               <Button asChild variant="ghost" size="icon" title="Open">

@@ -116,39 +116,80 @@ function SchedulePage() {
             </div>
           </div>
         ) : (
-          <form onSubmit={onSubmit} className="mt-8 space-y-5 rounded-2xl border border-border bg-card p-6 shadow-soft">
+          <form
+            onSubmit={onSubmit}
+            className="mt-8 space-y-5 rounded-2xl border border-border bg-card p-6 shadow-soft"
+          >
             <div>
               <Label htmlFor="title">Meeting title</Label>
-              <Input id="title" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Weekly team sync" className="mt-1.5" />
+              <Input
+                id="title"
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                placeholder="Weekly team sync"
+                className="mt-1.5"
+              />
             </div>
             <div className="grid gap-4 sm:grid-cols-2">
               <div>
                 <Label htmlFor="date">Date</Label>
-                <Input id="date" type="date" value={date} onChange={(e) => setDate(e.target.value)} className="mt-1.5" />
+                <Input
+                  id="date"
+                  type="date"
+                  value={date}
+                  onChange={(e) => setDate(e.target.value)}
+                  className="mt-1.5"
+                />
               </div>
               <div>
                 <Label htmlFor="time">Time</Label>
-                <Input id="time" type="time" value={time} onChange={(e) => setTime(e.target.value)} className="mt-1.5" />
+                <Input
+                  id="time"
+                  type="time"
+                  value={time}
+                  onChange={(e) => setTime(e.target.value)}
+                  className="mt-1.5"
+                />
               </div>
             </div>
             <div className="grid gap-4 sm:grid-cols-2">
               <div>
                 <Label htmlFor="duration">Duration (minutes)</Label>
-                <Input id="duration" type="number" min={15} step={15} value={duration} onChange={(e) => setDuration(e.target.value)} className="mt-1.5" />
+                <Input
+                  id="duration"
+                  type="number"
+                  min={15}
+                  step={15}
+                  value={duration}
+                  onChange={(e) => setDuration(e.target.value)}
+                  className="mt-1.5"
+                />
               </div>
               <div>
                 <Label htmlFor="password">Password (optional)</Label>
-                <Input id="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Leave blank for none" className="mt-1.5" />
+                <Input
+                  id="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="Leave blank for none"
+                  className="mt-1.5"
+                />
               </div>
             </div>
             <div className="flex items-center justify-between rounded-xl border border-border bg-muted/40 p-4">
               <div>
                 <div className="font-medium">Waiting room</div>
-                <div className="text-xs text-muted-foreground">Approve guests before they join.</div>
+                <div className="text-xs text-muted-foreground">
+                  Approve guests before they join.
+                </div>
               </div>
               <Switch checked={waitingRoom} onCheckedChange={setWaitingRoom} />
             </div>
-            <Button type="submit" disabled={submitting} className="h-11 w-full bg-gradient-primary text-primary-foreground hover:opacity-95">
+            <Button
+              type="submit"
+              disabled={submitting}
+              className="h-11 w-full bg-gradient-primary text-primary-foreground hover:opacity-95"
+            >
               {submitting ? "Creating…" : "Create meeting"}
             </Button>
           </form>
