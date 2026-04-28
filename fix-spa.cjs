@@ -1,0 +1,37 @@
+const fs = require("fs");
+const path = require("path");
+
+const distPath = path.join(__dirname, "dist");
+const assetsPath = path.join(distPath, "assets");
+
+if (!fs.existsSync(assetsPath)) {
+  console.error("Assets directory not found at " + assetsPath);
+  process.exit(1);
+}
+
+const files = fs.readdirSync(assetsPath);
+const mainJs = files.find((f) => f.startsWith("index-") && f.endsWith(".js"));
+const mainCss = files.find((f) => f.startsWith("styles-") && f.endsWith(".css"));
+
+if (!mainJs || !mainCss) {
+  console.error("Main JS or CSS not found. Files in assets: " + files.join(", "));
+  process.exit(1);
+}
+
+const html = `<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/png" href="/favicon.png" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Gather | Frictionless Video Meetings</title>
+    <link rel="stylesheet" href="/assets/${mainCss}">
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/assets/${mainJs}"></script>
+  </body>
+</html>`;
+
+fs.writeFileSync(path.join(distPath, "index.html"), html);
+console.log("Successfully generated dist/index.html with " + mainJs + " and " + mainCss);
