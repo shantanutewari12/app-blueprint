@@ -41,4 +41,10 @@ const html = `<!DOCTYPE html>
 </html>`;
 
 fs.writeFileSync(path.join(distPath, "index.html"), html);
-console.log("Successfully generated dist/index.html with " + mainJs + " and " + mainCss);
+const clientIndex = path.join(distPath, "client", "index.html");
+if (fs.existsSync(path.dirname(clientIndex))) {
+  fs.writeFileSync(clientIndex, html);
+}
+console.log("Successfully generated index.html in dist/ and dist/client/");
+console.log("Main JS: " + mainJs);
+console.log("Main CSS: " + mainCss);
